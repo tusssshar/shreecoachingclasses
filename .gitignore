@@ -1,0 +1,28 @@
+# Archives / backups
+sms.zip
+*.zip
+sms_git/
+
+# User uploads
+uploads/
+
+# Logs
+*.log
+application/logs/*.php
+!application/logs/index.html
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Cache
+application/cache/*
+!application/cache/index.html
+!application/cache/.htaccess
+
+# Sessions
+application/sessions/*
+!application/sessions/index.html
