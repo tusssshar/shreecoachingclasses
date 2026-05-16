@@ -4,12 +4,12 @@
     	<!------CONTROL TABS START------>
 		<ul class="nav nav-tabs bordered">
 			<li class="active">
-            	<a href="#list" data-toggle="tab"><i class="entypo-menu"></i> 
-					<?php echo get_phrase('class_list');?>
+            	<a href="#list" data-toggle="tab"><i class="entypo-menu"></i>
+					Standard List
                     	</a></li>
 			<li>
             	<a href="#add" data-toggle="tab"><i class="entypo-plus-circled"></i>
-					<?php echo get_phrase('add_class');?>
+					Add Standard
                     	</a></li>
 		</ul>
     	<!------CONTROL TABS END------>

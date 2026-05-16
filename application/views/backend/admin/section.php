@@ -3,13 +3,23 @@
 <?php if ($this->session->flashdata('error_message')): ?>
     <div class="alert alert-danger"><?php echo $this->session->flashdata('error_message'); ?></div>
 <?php endif; ?>
+<?php if ($this->session->flashdata('flash_message')): ?>
+    <div class="alert alert-success"><?php echo $this->session->flashdata('flash_message'); ?></div>
+<?php endif; ?>
 
-<a href="javascript:;" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/section_add/');" 
-    class="btn btn-primary pull-right">
-        <i class="entypo-plus-circled"></i>
-        Add Time Table
-</a>
-<br><br><br>
+<div style="margin-bottom:12px;">
+    <a href="javascript:;" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/section_add/');"
+        class="btn btn-primary pull-right">
+            <i class="entypo-plus-circled"></i>
+            Add Time Table
+    </a>
+    <a href="#" onclick="if(confirm('Send today\'s lecture reminder email to every teacher whose timetable includes today?')) window.location='<?php echo base_url();?>index.php?admin/send_timetable_reminders';"
+        class="btn btn-warning pull-right" style="margin-right:8px;">
+            <i class="entypo-mail"></i>
+            Send Today's Reminders
+    </a>
+    <div class="clearfix"></div>
+</div>
 
 <div class="row">
     <div class="col-md-12">

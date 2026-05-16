@@ -23,8 +23,38 @@
         <div class="panel panel-default">
             <div class="panel-heading clearfix">
                 <h4 class="panel-title pull-left">Manage Daily Attendance</h4>
+                <div class="pull-right">
+                    <button type="button" class="btn btn-success btn-sm" data-toggle="modal" data-target="#exportAttModal">
+                        <i class="entypo-download"></i> Export Attendance
+                    </button>
+                </div>
             </div>
             <div class="panel-body">
+
+                <?php $active_tab = isset($active_tab) ? $active_tab : 'student'; ?>
+
+                <ul class="nav nav-tabs" style="margin-bottom:18px;">
+                    <li class="<?php echo $active_tab == 'student' ? 'active' : ''; ?>">
+                        <a href="<?php echo base_url(); ?>index.php?admin/manage_attendance/<?php echo date('d/m/Y', strtotime($selected_date)); ?>">
+                            <i class="entypo-users"></i> Students
+                        </a>
+                    </li>
+                    <li class="<?php echo $active_tab == 'teacher' ? 'active' : ''; ?>">
+                        <a href="<?php echo base_url(); ?>index.php?admin/manage_attendance/teacher/<?php echo date('d/m/Y', strtotime($selected_date)); ?>">
+                            <i class="entypo-user"></i> Teachers
+                        </a>
+                    </li>
+                </ul>
+
+                <?php if ($active_tab == 'teacher'): ?>
+
+                    <?php $this->load->view('backend/admin/manage_attendance_teacher', array(
+                        'selected_date'               => $selected_date,
+                        'teachers'                    => $teachers,
+                        'existing_teacher_attendance' => $existing_teacher_attendance,
+                    )); ?>
+
+                <?php else: ?>
 
                 <!-- Filter bar (GET): pick date + class -->
                 <div class="att-toolbar">
@@ -125,10 +155,103 @@
                     </form>
                 <?php endif; ?>
 
+                <?php endif; /* active_tab */ ?>
+
             </div>
         </div>
     </div>
 </div>
+
+<!-- ATTENDANCE EXPORT MODAL -->
+<style>
+    #exportAttModal { z-index: 10500 !important; }
+    #exportAttModal .modal-dialog { z-index: 10501 !important; }
+    body > .modal-backdrop.in { z-index: 10400 !important; }
+</style>
+<div class="modal fade" id="exportAttModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">Export Attendance (CSV)</h4>
+            </div>
+            <div class="modal-body">
+
+                <ul class="nav nav-tabs" id="exportTabs">
+                    <li class="active"><a href="#exp_student" data-toggle="tab">Students</a></li>
+                    <li><a href="#exp_teacher" data-toggle="tab">Teachers</a></li>
+                </ul>
+
+                <div class="tab-content" style="padding-top:14px;">
+                    <div class="tab-pane active" id="exp_student">
+                        <p class="text-muted" style="font-size:12px;">
+                            One row per student. Columns 1..31 show <strong>P</strong> / <strong>A</strong> / blank for each day, plus monthly totals.
+                        </p>
+                        <div class="form-group">
+                            <label><strong>Month</strong></label>
+                            <input type="month" id="exp_s_month" class="form-control" value="<?php echo date('Y-m'); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label><strong>Class</strong></label>
+                            <select id="exp_s_class" class="form-control">
+                                <option value="0">All Classes</option>
+                                <?php foreach ($classes as $c): ?>
+                                    <option value="<?php echo (int)$c['class_id']; ?>"><?php echo htmlspecialchars($c['name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="exportStudentAtt()">
+                            <i class="entypo-download"></i> Download Students CSV
+                        </button>
+                    </div>
+
+                    <div class="tab-pane" id="exp_teacher">
+                        <p class="text-muted" style="font-size:12px;">
+                            One row per teacher. Use this to compute working days for the salary slip.
+                        </p>
+                        <div class="form-group">
+                            <label><strong>Month</strong></label>
+                            <input type="month" id="exp_t_month" class="form-control" value="<?php echo date('Y-m'); ?>">
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="exportTeacherAtt()">
+                            <i class="entypo-download"></i> Download Teachers CSV
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+jQuery(document).ready(function ($) {
+    // Move modal to <body> so backdrop doesn't render on top of it (Bootstrap 3 quirk)
+    var $modal = $('#exportAttModal');
+    if ($modal.length && $modal.parent().prop('tagName') !== 'BODY') {
+        $modal.appendTo('body');
+    }
+});
+
+function exportStudentAtt() {
+    var m = document.getElementById('exp_s_month').value; // YYYY-MM
+    var c = document.getElementById('exp_s_class').value || 0;
+    if (!m) { alert('Pick a month.'); return; }
+    var parts = m.split('-'); // [YYYY, MM]
+    window.location = '<?php echo base_url(); ?>index.php?admin/manage_attendance/export_student/' +
+                      parts[0] + '/' + parts[1] + '/' + c;
+}
+function exportTeacherAtt() {
+    var m = document.getElementById('exp_t_month').value;
+    if (!m) { alert('Pick a month.'); return; }
+    var parts = m.split('-');
+    window.location = '<?php echo base_url(); ?>index.php?admin/manage_attendance/export_teacher/' +
+                      parts[0] + '/' + parts[1];
+}
+</script>
 
 <script>
     function loadAttendance() {

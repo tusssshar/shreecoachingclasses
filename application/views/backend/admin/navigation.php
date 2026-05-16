@@ -86,12 +86,44 @@
             </ul>
         </li>
 		
-        <!-- BOARD -->
-        <li class="<?php if ($page_name == 'academic_syllabus') echo 'active'; ?> ">
-            <a href="<?php echo base_url(); ?>index.php?admin/academic_syllabus">
+        <!-- MASTER DATA (board, lookups, salary structure) -->
+        <li class="<?php
+        if ($page_name == 'academic_syllabus' ||
+                $page_name == 'lookup_values' ||
+                $page_name == 'salary_settings')
+            echo 'opened active';
+        ?> ">
+            <a href="#">
                 <i class="entypo-book"></i>
-                <span>Board</span>
+                <span>Master Data</span>
             </a>
+            <ul>
+                <li class="<?php if ($page_name == 'academic_syllabus') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/academic_syllabus">
+                        <span><i class="entypo-dot"></i> Board</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'lookup_values') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/lookup_values/medium">
+                        <span><i class="entypo-dot"></i> Medium</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'lookup_values') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/lookup_values/payment_type">
+                        <span><i class="entypo-dot"></i> Type of Payment</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'lookup_values') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/lookup_values/payment_mode">
+                        <span><i class="entypo-dot"></i> Mode of Payment</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'salary_settings') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/salary_settings">
+                        <span><i class="entypo-dot"></i> Salary Structure</span>
+                    </a>
+                </li>
+            </ul>
         </li>
 
         <!-- TEACHER -->
@@ -102,21 +134,25 @@
             </a>
         </li>
 
-        <!-- PARENTS -->
+        <!-- PARENTS (hidden) -->
+        <?php /*
         <li class="<?php if ($page_name == 'parent') echo 'active'; ?> ">
             <a href="<?php echo base_url(); ?>index.php?admin/parent">
                 <i class="entypo-users"></i>
                 <span><?php echo get_phrase('parents'); ?></span>
             </a>
         </li>
-		
-		 <!-- LIBRARIAN -->
+        */ ?>
+
+         <!-- LIBRARIAN (hidden) -->
+        <?php /*
         <li class="<?php if ($page_name == 'librarian') echo 'active'; ?> ">
             <a href="<?php echo base_url(); ?>index.php?admin/librarian">
                 <i class="entypo-users"></i>
                 <span><?php echo get_phrase('librarians'); ?></span>
             </a>
         </li>
+        */ ?>
 		
 		 <!-- LIBRARIAN -->
         <li class="<?php if ($page_name == 'alumni') echo 'active'; ?> ">
@@ -213,28 +249,28 @@
             </ul>
         </li>
 
-        <!-- CLASS -->
-        <li class="<?php
-        if ($page_name == 'class' ||
-                $page_name == 'section')
-            echo 'opened active';
-        ?> ">
-            <a href="#">
+        <!-- MANAGE STANDARDS -->
+        <li class="<?php if ($page_name == 'class') echo 'active'; ?> ">
+            <a href="<?php echo base_url(); ?>index.php?admin/classes">
                 <i class="entypo-flow-tree"></i>
-                <span><?php echo get_phrase('class'); ?></span>
+                <span>Manage Standards</span>
             </a>
-            <ul>
-                <li class="<?php if ($page_name == 'class') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/classes">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('manage_classes'); ?></span>
-                    </a>
-                </li>
-                <li class="<?php if ($page_name == 'section') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/section">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('manage_sections'); ?></span>
-                    </a>
-                </li>
-            </ul>
+        </li>
+
+        <!-- MANAGE TEACHERS TIME TABLE -->
+        <li class="<?php if ($page_name == 'section') echo 'active'; ?> ">
+            <a href="<?php echo base_url(); ?>index.php?admin/section">
+                <i class="entypo-clock"></i>
+                <span>Manage Teachers Time Table</span>
+            </a>
+        </li>
+
+        <!-- MANAGE DAILY ATTENDANCE -->
+        <li class="<?php if ($page_name == 'manage_attendance') echo 'active'; ?> ">
+            <a href="<?php echo base_url(); ?>index.php?admin/manage_attendance/<?php echo date("d/m/Y"); ?>">
+                <i class="entypo-chart-area"></i>
+                <span>Manage Daily Attendance</span>
+            </a>
         </li>
 
         <!-- SUBJECT (hidden) -->
@@ -307,76 +343,56 @@
         </li>
         */ ?>
 
-        <!-- DAILY ATTENDANCE -->
-        <li class="<?php if ($page_name == 'manage_attendance') echo 'active'; ?> ">
-            <a href="<?php echo base_url(); ?>index.php?admin/manage_attendance/<?php echo date("d/m/Y"); ?>">
-                <i class="entypo-chart-area"></i>
-                <span><?php echo get_phrase('daily_attendances'); ?></span>
-            </a>
-
-        </li>
-		
-		
-		
-		 <!-- EXAMS -->
+        <!-- COMBINED EXAMS & CBT -->
         <li class="<?php
         if ($page_name == 'exam_list' ||
-                $page_name == 'exam_add' || 
-				      $page_name == 'exam_view'||
-					   $page_name == 'exam_result_list')
+                $page_name == 'exam_add' ||
+                $page_name == 'exam_view' ||
+                $page_name == 'exam_result_list' ||
+                $page_name == 'exam_result_detail' ||
+                $page_name == 'exam_assign' ||
+                $page_name == 'exam_paper_check' ||
+                $page_name == 'exam' ||
+                $page_name == 'grade' ||
+                $page_name == 'marks' ||
+                $page_name == 'exam_marks_sms' ||
+                $page_name == 'examquestion' ||
+                $page_name == 'tabulation_sheet')
             echo 'opened active';
         ?> ">
             <a href="#">
                 <i class="entypo-graduation-cap"></i>
-                <span><?php echo get_phrase('manage_CBT'); ?></span>
+                <span>Manage Exams &amp; CBT</span>
             </a>
             <ul>
-			
-			<li class="<?php if ($page_name == 'exam_add') echo 'active'; ?> ">
+                <li class="<?php if ($page_name == 'exam') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('exam_list'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'exam_add') echo 'active'; ?> ">
                     <a href="<?php echo base_url(); ?>index.php?admin/exam_add">
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('add_exams'); ?></span>
                     </a>
-                </li>  
-				
+                </li>
                 <li class="<?php if ($page_name == 'exam_list' || $page_name == 'exam_view') echo 'active'; ?> ">
                     <a href="<?php echo base_url(); ?>index.php?admin/exam_list">
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('list_exams'); ?></span>
                     </a>
                 </li>
-				
-				 <li class="<?php if ($page_name == 'exam_result_list') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam_result_list">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('view_result'); ?></span>
-                    </a>
-                </li>    
-				            
-            </ul>
-        </li>
-		
-	
-        <!-- EXAMS -->
-        <li class="<?php
-        if ($page_name == 'exam' ||
-                $page_name == 'grade' ||
-                $page_name == 'marks' ||
-                    $page_name == 'exam_marks_sms' ||
-                    $page_name == 'examquestion' ||
-                        $page_name == 'tabulation_sheet')
-                            echo 'opened active';
-        ?> ">
-            <a href="#">
-                <i class="entypo-graduation-cap"></i>
-                <span><?php echo get_phrase('exams'); ?></span>
-            </a>
-            <ul>
-			  <li class="<?php if ($page_name == 'examquestion') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/examquestion">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('manage_exam_questions'); ?></span>
+                <li class="<?php if ($page_name == 'exam_assign') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_assign">
+                        <span><i class="entypo-dot"></i> Assign Exam to Student</span>
                     </a>
                 </li>
-                <li class="<?php if ($page_name == 'exam') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('exam_list'); ?></span>
+                <li class="<?php if ($page_name == 'exam_paper_check') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_paper_check">
+                        <span><i class="entypo-dot"></i> Online Paper Checking</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'exam_result_list' || $page_name == 'exam_result_detail') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_result_list">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('view_result'); ?></span>
                     </a>
                 </li>
                 <li class="<?php if ($page_name == 'grade') echo 'active'; ?> ">
@@ -389,11 +405,6 @@
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('manage_marks'); ?></span>
                     </a>
                 </li>
-                <li class="<?php if ($page_name == 'exam_marks_sms') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam_marks_sms">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('send_marks_by_sms'); ?></span>
-                    </a>
-                </li>
                 <li class="<?php if ($page_name == 'tabulation_sheet') echo 'active'; ?> ">
                     <a href="<?php echo base_url(); ?>index.php?admin/tabulation_sheet">
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('tabulation_sheet'); ?></span>
@@ -402,13 +413,15 @@
             </ul>
         </li>
 
-<!-- AASIGNMENTS -->
+<!-- AASIGNMENTS (hidden) -->
+        <?php /*
         <li class="<?php if ($page_name == 'assignment') echo 'active'; ?> ">
             <a href="<?php echo base_url(); ?>index.php?admin/assignment">
                 <i class="entypo-book"></i>
                 <span><?php echo get_phrase('assignments'); ?></span>
             </a>
         </li>
+        */ ?>
         <!-- PAYMENT -->
         <!-- <li class="<?php //if ($page_name == 'invoice') echo 'active'; ?> ">
             <a href="<?php //echo base_url(); ?>index.php?admin/invoice">

@@ -60,8 +60,16 @@
 													<?php echo get_phrase('edit');?>
                                                	</a>
                                         				</li>
+
+                                        <!-- GENERATE SALARY SLIP -->
+                                        <li>
+                                            <a href="<?php echo base_url();?>index.php?admin/teacher_salary_slip/<?php echo $row['teacher_id'];?>">
+                                                <i class="entypo-doc-text"></i>
+                                                Generate Salary Slip
+                                            </a>
+                                        </li>
                                         <li class="divider"></li>
-                                        
+
                                         <!-- teacher DELETION LINK -->
                                         <li>
                                         	<a href="#" onclick="confirm_modal('<?php echo base_url();?>index.php?admin/teacher/delete/<?php echo $row['teacher_id'];?>');">

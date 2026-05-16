@@ -1,57 +1,73 @@
 <hr>
-<div class="row">
-    <div class="col-md-12">
-	<hr>
-        <!------CONTROL TABS START------>
-		 <div class="panel panel-success" >
-            
-                <div class="panel-heading">
-                    <div class="panel-title">
-                         <?php echo $detail_list[0]['class'] ?> | <?php echo $detail_list[0]['student'] ?> | <?php echo $detail_list[0]['subject'] ?> | <?php echo $detail_list[0]['date'] ?> <?php echo get_phrase('exam_reult'); ?>
-               
-                    </div>
-                </div>
-        <!------CONTROL TABS END------>
-
-        <div class="tab-content">
-            <div class="tab-pane box active" id="list">
-                <div class="row form-group">
-                    <div class="col-md-6"></div>
-                </div>
-            </div>
-
-            <?php
-            $marks = 0;
-            foreach ($detail_list as $row) {
-                ?>
-                <div class="row form-group border-top" style="padding-top: 10px;">
-                    <label class="col-sm-2 col-md-2 col-lg-2 text-right"><?php echo get_phrase('question'); ?>:</label>
-                    <div class="col-sm-10 col-md-10 col-lg-10"><?php echo $row['question']; ?></div>
-                </div>
-                <div class="row form-group">
-                    <label class="col-sm-2 col-md-2 col-lg-2 text-right"><?php echo get_phrase('correct_answer'); ?>:</label>
-                    <div class="col-sm-10 col-md-10 col-lg-10"><?php echo $row['correct_content']; ?></div>
-                </div>                
-                <div class="row form-group">
-                    <label class="col-sm-2 col-md-2 col-lg-2 text-right"><?php echo get_phrase('your_answer'); ?>:</label>
-                    <div class="col-sm-10 col-md-10 col-lg-10"><?php echo $row['answer_content']; ?></div>
-                </div>
-                <div class="row form-group">
-                    <label class="col-sm-2 col-md-2 col-lg-2 text-right"><?php echo get_phrase('result'); ?>:</label>
-                    <div class="col-sm-10 col-md-10 col-lg-10"><?php echo ($row['marks'] == 1 ? '<i class="btn btn-success fa fa-check"></i>' : '<i class="btn btn-danger fa fa-times"></i>'); ?></div>
-                </div>
-                <input type="hidden" class="marks" value="<?php echo $row['marks']; ?>"/>
-                <?php
-                if ($row['marks'] == 1)
-                    $marks ++;
-            }
-            ?>
-            <div class="row form-group border-top" style="padding-top: 10px;">
-                <label class="col-sm-4 col-md-4 col-lg-4 text-right"><h2><?php echo get_phrase('marks'); ?>:</h2></label>
-                <div class="col-sm-8 col-md-8 col-lg-8"><h2><?php echo $marks; ?> / <?php echo $detail_list[0]['question_count'] ?></h2></div>
-            </div>
-
+<div class="panel panel-gradient">
+    <div class="panel-heading">
+        <div class="panel-title">
+            <?php echo htmlspecialchars($class_name); ?>
+            | <?php echo htmlspecialchars($student['name'] ?? ''); ?>
+            | <?php echo htmlspecialchars($subject_name); ?>
+            | <?php echo htmlspecialchars($exam['date']); ?>
+            — Exam Result
         </div>
     </div>
-</div>
+    <div class="panel-body">
+
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th width="40">#</th>
+                    <th>Question</th>
+                    <th>Correct</th>
+                    <th>Student Answer</th>
+                    <th>Marks Awarded / Max</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php
+            $total_awarded = 0;
+            $total_possible = 0;
+            $i = 1;
+            foreach ($questions as $row):
+                $correct = '';
+                $student_text = '';
+                foreach ($row['options'] as $opt) {
+                    if ($opt['label'] === $row['correct_answers']) $correct = $opt['content'];
+                    if (!empty($row['student_answer']) && $opt['label'] === $row['student_answer']) $student_text = $opt['content'];
+                }
+                $awarded = $row['marks_awarded'] !== null ? (float)$row['marks_awarded'] : 0;
+                $total_awarded  += $awarded;
+                $total_possible += (int)$row['marks'];
+            ?>
+                <tr>
+                    <td><?php echo $i++; ?></td>
+                    <td><?php echo nl2br(htmlspecialchars($row['question'])); ?></td>
+                    <td>
+                        <strong><?php echo htmlspecialchars($row['correct_answers']); ?></strong>
+                        <?php if ($correct !== '') echo ' — ' . htmlspecialchars($correct); ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($row['student_answer'])): ?>
+                            <strong><?php echo htmlspecialchars($row['student_answer']); ?></strong>
+                            <?php if ($student_text !== '') echo ' — ' . htmlspecialchars($student_text); ?>
+                        <?php else: ?>
+                            <em>not attempted</em>
+                        <?php endif; ?>
+                    </td>
+                    <td><?php echo $awarded; ?> / <?php echo (int)$row['marks']; ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="4" class="text-right">Total</th>
+                    <th><?php echo $total_awarded; ?> / <?php echo $total_possible; ?>
+                        <?php if ($total_possible > 0): ?>
+                            (<?php echo round(($total_awarded / $total_possible) * 100, 2); ?>%)
+                        <?php endif; ?>
+                    </th>
+                </tr>
+            </tfoot>
+        </table>
+
+        <a href="<?php echo base_url(); ?>index.php?admin/exam_result_list" class="btn btn-default">Back to Results</a>
+    </div>
 </div>

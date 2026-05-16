@@ -14,7 +14,7 @@
                     </div>
                 </div>
                 <div class="panel-body">
-    <?php echo form_open(base_url() . 'index.php?admm/examxreateinfo/create', array('class' => 'form-horizontal form-groups-bordered validate', 'target' => '_top')); ?>
+    <?php echo form_open(base_url() . 'index.php?admin/exam_add/create', array('class' => 'form-horizontal form-groups-bordered validate', 'target' => '_top')); ?>
     <div class="padded">
         <div class="form-group">
             <label class="col-sm-3 control-label"><?php echo get_phrase('exam_class'); ?></label>

@@ -130,10 +130,12 @@
 					<div class="form-group">
 						<label class="col-sm-3 control-label">Medium</label>
 						<div class="col-sm-5">
+							<?php $this->load->model('crud_model'); ?>
 							<select class="form-control" name="medium" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>">
-								<option>-Select-</option>
-								<option>English</option>
-								<option>Hindi</option>
+								<option value="">-Select-</option>
+								<?php foreach ($this->crud_model->get_lookup_values('medium', array('English','Hindi')) as $opt): ?>
+									<option value="<?php echo htmlspecialchars($opt); ?>"><?php echo htmlspecialchars($opt); ?></option>
+								<?php endforeach; ?>
 							</select>
 						</div>
 					</div>
@@ -214,8 +216,9 @@
 						<div class="col-sm-5">
 							<select class="form-control" name="payment1_type">
 								<option value="">-Select-</option>
-								<option value="Admission">Admission</option>
-								<option value="Installment">Installment</option>
+								<?php foreach ($this->crud_model->get_lookup_values('payment_type', array('Admission','Installment')) as $opt): ?>
+									<option value="<?php echo htmlspecialchars($opt); ?>"><?php echo htmlspecialchars($opt); ?></option>
+								<?php endforeach; ?>
 							</select>
 						</div>
 					</div>
@@ -225,9 +228,9 @@
 						<div class="col-sm-5">
 							<select class="form-control" name="payment1_mode">
 								<option value="">-Select-</option>
-								<option value="Cash">Cash</option>
-								<option value="Online">Online</option>
-								<option value="Cheque">Cheque</option>
+								<?php foreach ($this->crud_model->get_lookup_values('payment_mode', array('Cash','Online','Cheque')) as $opt): ?>
+									<option value="<?php echo htmlspecialchars($opt); ?>"><?php echo htmlspecialchars($opt); ?></option>
+								<?php endforeach; ?>
 							</select>
 						</div>
 					</div>

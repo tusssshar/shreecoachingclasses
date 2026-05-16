@@ -14,6 +14,55 @@ class Crud_model extends CI_Model {
         $this->output->set_header('Pragma: no-cache');
     }
 
+    /**
+     * Returns active values for a lookup category (Medium, Payment Type, Payment Mode, ...).
+     * Falls back to the supplied defaults if the table doesn't exist or has no rows yet.
+     */
+    function get_lookup_values($category, $defaults = array()) {
+        if (!$this->db->table_exists('lookup_value')) return $defaults;
+        $rows = $this->db->where('category', $category)
+                         ->where('is_active', 1)
+                         ->order_by('sort_order', 'asc')
+                         ->order_by('value', 'asc')
+                         ->get('lookup_value')->result_array();
+        if (empty($rows)) return $defaults;
+        $out = array();
+        foreach ($rows as $r) $out[] = $r['value'];
+        return $out;
+    }
+
+    /**
+     * Salary structure (percentages of Basic + fixed values). Reads overrides
+     * from `settings` (rows with type='salary_*'), falling back to defaults.
+     * Used by teacher add/edit modals, salary slip, and salary settings page.
+     */
+    function salary_structure() {
+        $s = array(
+            'percentages' => array(
+                'hra'               => 50,
+                'da'                => 20,
+                'conveyance'        => 10,
+                'medical_allowance' => 10,
+                'other_allowance'   => 10,
+                'other_deduction'   => 0,
+            ),
+            'fixed' => array(
+                'pf_deduction'  => 1800,
+                'tax_deduction' => 200,
+            ),
+        );
+        $rows = $this->db->like('type', 'salary_', 'after')->get('settings')->result_array();
+        foreach ($rows as $row) {
+            $key = substr($row['type'], strlen('salary_'));
+            if (array_key_exists($key, $s['percentages'])) {
+                $s['percentages'][$key] = (float)$row['description'];
+            } elseif (array_key_exists($key, $s['fixed'])) {
+                $s['fixed'][$key] = (float)$row['description'];
+            }
+        }
+        return $s;
+    }
+
     function get_type_name_by_id($type, $type_id = '', $field = 'name') {
         if ($type_id === '' || $type_id === null) return '';
         $row = $this->db->get_where($type, array($type . '_id' => $type_id))->row();
@@ -265,12 +314,26 @@ class Crud_model extends CI_Model {
             } else {
                 $image_url = base_url() . 'uploads/user.jpg';
             }
-        } else {
-            if (file_exists('uploads/' . $type . '_image/' . $id . '.jpg'))
-                $image_url = base_url() . 'uploads/' . $type . '_image/' . $id . '.jpg';
-            else
-                $image_url = base_url() . 'uploads/user.jpg';
+            return $image_url;
         }
+
+        // teacher: prefer new teacher_photo column / folder, fall back to legacy teacher_image/<id>.jpg
+        if ($type == 'teacher') {
+            if ($this->db->table_exists('teacher') && $this->db->field_exists('teacher_photo', 'teacher')) {
+                $row = $this->db->get_where('teacher', array('teacher_id' => $id))->row();
+                if ($row && !empty($row->teacher_photo) && file_exists('uploads/teacher_photo/' . $row->teacher_photo)) {
+                    return base_url() . 'uploads/teacher_photo/' . $row->teacher_photo;
+                }
+            }
+            if (file_exists('uploads/teacher_image/' . $id . '.jpg'))
+                return base_url() . 'uploads/teacher_image/' . $id . '.jpg';
+            return base_url() . 'uploads/user.jpg';
+        }
+
+        if (file_exists('uploads/' . $type . '_image/' . $id . '.jpg'))
+            $image_url = base_url() . 'uploads/' . $type . '_image/' . $id . '.jpg';
+        else
+            $image_url = base_url() . 'uploads/user.jpg';
 
         return $image_url;
     }

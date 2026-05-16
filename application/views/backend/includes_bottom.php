@@ -37,14 +37,25 @@
 	<script src="assets/js/neon-demo.js"></script>
 
 
-<!-- SHOW TOASTR NOTIFIVATION -->
-<?php if ($this->session->flashdata('flash_message') != ""):?>
-
+<!-- SHOW TOASTR NOTIFICATION (clears flash keys after rendering so they don't leak across pages) -->
+<?php
+	$__flash_success = $this->session->flashdata('flash_message');
+	$__flash_error   = $this->session->flashdata('error_message');
+	// Explicitly null these so they never survive into the next request,
+	// regardless of CI3 session-regeneration quirks.
+	$this->session->set_userdata('flash_message', '');
+	$this->session->set_userdata('error_message', '');
+?>
+<?php if ($__flash_success): ?>
 <script type="text/javascript">
-	toastr.success('<?php echo $this->session->flashdata("flash_message");?>');
+	toastr.success(<?php echo json_encode($__flash_success); ?>);
 </script>
-
-<?php endif;?>
+<?php endif; ?>
+<?php if ($__flash_error): ?>
+<script type="text/javascript">
+	toastr.error(<?php echo json_encode($__flash_error); ?>);
+</script>
+<?php endif; ?>
 
 
 <!-----  DATA TABLE EXPORT CONFIGURATIONS ---->                      

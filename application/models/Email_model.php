@@ -56,8 +56,66 @@ class Email_model extends CI_Model {
 		$this->do_email($email_msg , $email_sub , $email_to);
 	}
 	
+	/**
+	 * Sends a single digest reminder email to one teacher listing all their lectures today.
+	 *
+	 * @param array $teacher  ['name','email']
+	 * @param array $items    list of ['class_name','section_name','start_time','end_time']
+	 * @param array $school   ['name','address']
+	 * @param string|null $bcc  optional BCC address (admin)
+	 * @return bool
+	 */
+	function timetable_reminder_email($teacher, $items, $school, $bcc = null)
+	{
+		if (empty($teacher['email']) || empty($items)) return false;
+
+		$today_date = date('d M Y');
+		$today_day  = date('l');
+		$first_class = $items[0]['class_name'];
+		$first_start = !empty($items[0]['start_time']) ? date('h:i A', strtotime($items[0]['start_time'])) : '';
+
+		$subject = "Today's Class Reminder — " . $first_class . ($first_start ? ' · ' . $first_start : '');
+
+		$rows_html = '';
+		foreach ($items as $it) {
+			$st = !empty($it['start_time']) ? date('h:i A', strtotime($it['start_time'])) : '-';
+			$et = !empty($it['end_time'])   ? date('h:i A', strtotime($it['end_time']))   : '-';
+			$rows_html .= '<tr>'
+				. '<td style="padding:8px 12px;border:1px solid #ddd;">' . htmlspecialchars($it['class_name']) . '</td>'
+				. '<td style="padding:8px 12px;border:1px solid #ddd;">' . htmlspecialchars($it['section_name']) . '</td>'
+				. '<td style="padding:8px 12px;border:1px solid #ddd;">' . $st . '</td>'
+				. '<td style="padding:8px 12px;border:1px solid #ddd;">' . $et . '</td>'
+				. '</tr>';
+		}
+
+		$msg = ''
+			. '<div style="font-family:Arial,sans-serif;color:#222;max-width:640px;">'
+			. '<p>Dear ' . htmlspecialchars($teacher['name']) . ',</p>'
+			. '<p>This is a friendly reminder of your scheduled '
+			.   (count($items) > 1 ? 'lectures' : 'lecture') . ' today.</p>'
+			. '<p><strong>' . $today_date . ' (' . $today_day . ')</strong></p>'
+			. '<table style="border-collapse:collapse;width:100%;font-size:13px;">'
+			.   '<thead><tr style="background:#1f3a68;color:#fff;">'
+			.     '<th style="padding:8px 12px;border:1px solid #1f3a68;text-align:left;">Class</th>'
+			.     '<th style="padding:8px 12px;border:1px solid #1f3a68;text-align:left;">Section</th>'
+			.     '<th style="padding:8px 12px;border:1px solid #1f3a68;text-align:left;">Start</th>'
+			.     '<th style="padding:8px 12px;border:1px solid #1f3a68;text-align:left;">End</th>'
+			.   '</tr></thead>'
+			.   '<tbody>' . $rows_html . '</tbody>'
+			. '</table>'
+			. '<p style="margin-top:14px;">Please be available 5 minutes before the scheduled start.</p>'
+			. '<p>Wishing you a productive class.</p>'
+			. '<p style="margin-top:18px;color:#555;">Regards,<br>'
+			.   '<strong>' . htmlspecialchars($school['name']) . '</strong>'
+			.   (!empty($school['address']) ? '<br>' . htmlspecialchars($school['address']) : '')
+			. '</p>'
+			. '</div>';
+
+		return $this->do_email($msg, $subject, $teacher['email'], null, $bcc);
+	}
+
 	/***custom email sender****/
-	function do_email($msg=NULL, $sub=NULL, $to=NULL, $from=NULL)
+	function do_email($msg=NULL, $sub=NULL, $to=NULL, $from=NULL, $bcc=NULL)
 	{
 		
 		$config = array();
@@ -93,6 +151,9 @@ class Email_model extends CI_Model {
 		
 		$this->email->from($from, $system_name);
 		$this->email->to($to);
+		if (!empty($bcc)) {
+			$this->email->bcc($bcc);
+		}
 		$this->email->subject($sub);
 		
 		$msg	=	$msg."<br /><br /><br /><br /><br /><br /><br /><hr /><center><a href=\"https://optimumlinkup.com.ng/contact.php\">Contact us</a></center>";

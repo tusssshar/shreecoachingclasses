@@ -178,11 +178,14 @@ function inputField($label, $name, $value) {
 <div class="form-group">
     <label class="col-sm-3 control-label">Medium</label>
     <div class="col-sm-5">
+        <?php $this->load->model('crud_model'); ?>
         <select name="medium" class="form-control">
-            <option value="Marathi" <?php if($row['medium']=='Marathi') echo 'selected'; ?>>Marathi</option>
-            <option value="Hindi" <?php if($row['medium']=='Hindi') echo 'selected'; ?>>Hindi</option>
-            <option value="English" <?php if($row['medium']=='English') echo 'selected'; ?>>English</option>
-            <option value="Semi-English" <?php if($row['medium']=='Semi-English') echo 'selected'; ?>>Semi-English</option>
+            <option value="">-Select-</option>
+            <?php foreach ($this->crud_model->get_lookup_values('medium', array('English','Hindi','Marathi','Semi-English')) as $opt): ?>
+                <option value="<?php echo htmlspecialchars($opt); ?>" <?php if (($row['medium'] ?? '') === $opt) echo 'selected'; ?>>
+                    <?php echo htmlspecialchars($opt); ?>
+                </option>
+            <?php endforeach; ?>
         </select>
     </div>
 </div>
@@ -319,6 +322,17 @@ $(function(){
     dob.on('change', updateAge);
 });
 
+<?php
+    $this->load->model('crud_model');
+    $__pt_opts = '';
+    foreach ($this->crud_model->get_lookup_values('payment_type', array('Admission','Installment')) as $o) {
+        $__pt_opts .= '<option value="' . htmlspecialchars($o, ENT_QUOTES) . '">' . htmlspecialchars($o) . '</option>';
+    }
+    $__pm_opts = '';
+    foreach ($this->crud_model->get_lookup_values('payment_mode', array('Cash','Online','Cheque')) as $o) {
+        $__pm_opts .= '<option value="' . htmlspecialchars($o, ENT_QUOTES) . '">' . htmlspecialchars($o) . '</option>';
+    }
+?>
 /* ADD PAYMENT */
 function addMorePayment() {
     let count = $('.payment-extra').length + 1;
@@ -330,12 +344,12 @@ function addMorePayment() {
             <input type="number" name="payment${count}_amount" placeholder="Amount" class="form-control"><br>
             <input type="date" name="payment${count}_date" class="form-control"><br>
             <select name="payment${count}_type" class="form-control">
-                <option value="Admission">Admission</option>
-                <option value="Installment">Installment</option>
+                <option value="">-Select-</option>
+                <?php echo $__pt_opts; ?>
             </select><br>
             <select name="payment${count}_mode" class="form-control">
-                <option value="Cash">Cash</option>
-                <option value="Online">Online</option>
+                <option value="">-Select-</option>
+                <?php echo $__pm_opts; ?>
             </select>
         </div>
     </div>
