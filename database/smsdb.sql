@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 11, 2026 at 11:22 AM
+-- Generation Time: May 16, 2026 at 10:33 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -130,6 +130,52 @@ CREATE TABLE `answer` (
   `content` text NOT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 
+--
+-- Dumping data for table `answer`
+--
+
+INSERT INTO `answer` (`answer_id`, `question_id`, `label`, `content`) VALUES
+(286, 36, 'A', 'Delhi'),
+(287, 36, 'B', 'Mumbai'),
+(288, 36, 'C', 'Banglore'),
+(289, 36, 'D', 'Kolkata'),
+(290, 37, 'A', ''),
+(291, 37, 'B', ''),
+(292, 37, 'C', ''),
+(293, 37, 'D', ''),
+(294, 38, 'A', ''),
+(295, 38, 'B', ''),
+(296, 38, 'C', ''),
+(297, 38, 'D', ''),
+(298, 39, 'A', ''),
+(299, 39, 'B', ''),
+(300, 39, 'C', ''),
+(301, 39, 'D', ''),
+(302, 40, 'A', ''),
+(303, 40, 'B', ''),
+(304, 40, 'C', ''),
+(305, 40, 'D', ''),
+(306, 41, 'A', ''),
+(307, 41, 'B', ''),
+(308, 41, 'C', ''),
+(309, 41, 'D', ''),
+(310, 42, 'A', ''),
+(311, 42, 'B', ''),
+(312, 42, 'C', ''),
+(313, 42, 'D', ''),
+(314, 43, 'A', ''),
+(315, 43, 'B', ''),
+(316, 43, 'C', ''),
+(317, 43, 'D', ''),
+(318, 44, 'A', ''),
+(319, 44, 'B', ''),
+(320, 44, 'C', ''),
+(321, 44, 'D', ''),
+(322, 45, 'A', ''),
+(323, 45, 'B', ''),
+(324, 45, 'C', ''),
+(325, 45, 'D', '');
+
 -- --------------------------------------------------------
 
 --
@@ -195,7 +241,13 @@ INSERT INTO `attendance` (`attendance_id`, `status`, `student_id`, `date`) VALUE
 (21, 0, 14, '2017-07-16'),
 (22, 0, 5, '2017-07-16'),
 (23, 0, 11, '2017-07-16'),
-(24, 0, 13, '2017-07-16');
+(24, 0, 13, '2017-07-16'),
+(25, 1, 19, '2026-05-16'),
+(26, 1, 26, '2026-05-16'),
+(27, 0, 17, '2026-05-16'),
+(28, 0, 20, '2026-05-16'),
+(29, 1, 21, '2026-05-16'),
+(30, 1, 25, '2026-05-16');
 
 -- --------------------------------------------------------
 
@@ -521,6 +573,25 @@ INSERT INTO `examquestion` (`examquestion_id`, `name`, `title`, `description`, `
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `exam_assignment`
+--
+
+CREATE TABLE `exam_assignment` (
+  `assignment_id` int(11) NOT NULL,
+  `class_id` int(11) NOT NULL,
+  `subject_id` int(11) NOT NULL,
+  `date` date NOT NULL,
+  `duration` int(11) NOT NULL,
+  `session` varchar(255) NOT NULL DEFAULT '',
+  `student_id` int(11) NOT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'assigned',
+  `assigned_at` int(11) DEFAULT NULL,
+  `completed_at` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `exam_result`
 --
 
@@ -528,7 +599,10 @@ CREATE TABLE `exam_result` (
   `result_id` int(11) NOT NULL,
   `student_id` int(11) DEFAULT NULL,
   `question_id` int(11) DEFAULT NULL,
-  `answer` varchar(5) DEFAULT NULL
+  `answer` varchar(5) DEFAULT NULL,
+  `marks_awarded` decimal(10,2) DEFAULT NULL,
+  `status` varchar(20) DEFAULT 'submitted',
+  `submitted_at` int(11) DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
 
 -- --------------------------------------------------------
@@ -553,7 +627,8 @@ INSERT INTO `expense_category` (`expense_category_id`, `name`, `amount`, `year`)
 (2, 'Classroom Equipments', 3000.00, 2026),
 (3, 'Classroom Decorations', 0.00, NULL),
 (4, 'Inventory Purchase', 0.00, NULL),
-(5, 'Exam Accessories', 0.00, NULL);
+(5, 'Exam Accessories', 0.00, NULL),
+(6, 'Teacher Salary', 30000.00, 2025);
 
 -- --------------------------------------------------------
 
@@ -8518,6 +8593,33 @@ INSERT INTO `loan` (`loan_id`, `staff_name`, `amount`, `purpose`, `l_duration`, 
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `lookup_value`
+--
+
+CREATE TABLE `lookup_value` (
+  `lookup_id` int(11) NOT NULL,
+  `category` varchar(64) NOT NULL,
+  `value` varchar(128) NOT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+--
+-- Dumping data for table `lookup_value`
+--
+
+INSERT INTO `lookup_value` (`lookup_id`, `category`, `value`, `sort_order`, `is_active`) VALUES
+(1, 'medium', 'English', 1, 1),
+(2, 'medium', 'Hindi', 2, 1),
+(3, 'payment_type', 'Admission', 1, 1),
+(4, 'payment_type', 'Installment', 2, 1),
+(5, 'payment_mode', 'Cash', 1, 1),
+(6, 'payment_mode', 'Online', 2, 1),
+(7, 'payment_mode', 'Cheque', 3, 1);
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `mark`
 --
 
@@ -8709,8 +8811,25 @@ CREATE TABLE `question` (
   `question_count` int(11) DEFAULT NULL,
   `duration` int(5) DEFAULT NULL,
   `question` text DEFAULT NULL,
-  `correct_answers` varchar(255) DEFAULT NULL
+  `correct_answers` varchar(255) DEFAULT NULL,
+  `marks` int(11) NOT NULL DEFAULT 1
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
+--
+-- Dumping data for table `question`
+--
+
+INSERT INTO `question` (`question_id`, `class_id`, `subject_id`, `date`, `session`, `question_count`, `duration`, `question`, `correct_answers`, `marks`) VALUES
+(36, 2, 1, '2021-02-02', '', 10, 60, 'Capital of India', 'A', 1),
+(37, 2, 1, '2021-02-02', '', 10, 60, 'Question 2', 'A', 1),
+(38, 2, 1, '2021-02-02', '', 10, 60, 'Question 3', 'A', 1),
+(39, 2, 1, '2021-02-02', '', 10, 60, 'Question 4', 'A', 1),
+(40, 2, 1, '2021-02-02', '', 10, 60, 'Question 5', 'A', 1),
+(41, 2, 1, '2021-02-02', '', 10, 60, 'Question 6', 'A', 1),
+(42, 2, 1, '2021-02-02', '', 10, 60, 'Question 7', 'A', 1),
+(43, 2, 1, '2021-02-02', '', 10, 60, 'Question 8', 'A', 1),
+(44, 2, 1, '2021-02-02', '', 10, 60, 'Question 9', 'A', 1),
+(45, 2, 1, '2021-02-02', '', 10, 60, 'Question 10', 'A', 1);
 
 -- --------------------------------------------------------
 
@@ -8734,7 +8853,7 @@ CREATE TABLE `section` (
 --
 
 INSERT INTO `section` (`section_id`, `name`, `nick_name`, `class_id`, `teacher_id`, `days`, `start_time`, `end_time`) VALUES
-(1, 'FIRST', 'TERM', 1, 2, NULL, NULL, NULL),
+(1, 'Commerce', 'Commerce', 13, 5, 'Monday,Tuesday,Saturday', '13:00:00', '15:00:00'),
 (2, 'FIRST TERM', 'FIRST TERM', 2, 2, NULL, NULL, NULL),
 (3, 'FIRST TERM', 'FIRST TERM', 3, 4, NULL, NULL, NULL),
 (4, 'SECOND TERM', '2ND TERM', 3, 2, NULL, NULL, NULL),
@@ -8791,21 +8910,21 @@ INSERT INTO `settings` (`settings_id`, `type`, `description`) VALUES
 (1, 'system_name', 'Shree Coaching Classes'),
 (2, 'system_title', 'CRM'),
 (3, 'address', 'Lokmanya Nagar, Thane'),
-(4, 'phone', '+639123456789'),
-(5, 'paypal_email', 'joken000189561@gmail.com'),
-(6, 'currency', '₱'),
-(7, 'system_email', 'joken000189561@gmail.com'),
+(4, 'phone', '+919833963867'),
+(5, 'paypal_email', 'info@shreecoachingclasses.com'),
+(6, 'currency', '₹'),
+(7, 'system_email', 'info@shreecoachingclasses.com'),
 (20, 'active_sms_service', 'twilio'),
 (11, 'language', 'english'),
 (12, 'text_align', 'left-to-right'),
 (13, 'clickatell_user', ''),
 (14, 'clickatell_password', ''),
 (15, 'clickatell_api_id', ''),
-(16, 'skin_colour', 'red'),
+(16, 'skin_colour', 'blue'),
 (27, 'whatsapp_welcome_message', 'Dear Parent,\nThis is to confirm that your student {{studentname}} successfully registered with Shree Coaching Classes. We welcome you and wish you the very best for your learning journey with us.'),
 (19, 'twilio_sender_phone_number', ''),
 (21, 'session', ''),
-(22, 'footer', '© 2022 ADVANCE SCHOOL MANAGEMENT SYSTEM.'),
+(22, 'footer', '© 2026 CLASSES MANAGEMENT SYSTEM.'),
 (23, 'twilio_account_sid', 'ACed70f9399d53e9abcfef52321229e74e'),
 (24, 'twilio_auth_token', '34e969ff5ae635ddc932d05c3ae61a43'),
 (25, 'active_whatsapp', 'enabled'),
@@ -8864,7 +8983,7 @@ CREATE TABLE `student` (
 
 INSERT INTO `student` (`student_id`, `first_name`, `middle_name`, `last_name`, `name`, `birthday`, `sex`, `religion`, `blood_group`, `address`, `phone`, `fmobile`, `mmobile`, `emergency_contact`, `email`, `password`, `father_name`, `mother_name`, `class_id`, `standard`, `medium`, `board`, `birth_certificate`, `marksheet`, `aadhar_card`, `section_id`, `parent_id`, `roll`, `transport_id`, `dormitory_id`, `dormitory_room_number`, `authentication_key`, `student_photo`, `total_fees`, `payment_done`, `is_active`, `is_alumni`, `created_at`) VALUES
 (16, 'Tushar1', 'Suryakant1', 'Bhale1', 'Tushar1 Suryakant1 Bhale1', '2024-01-01', 'female', '', '', '', '', '222222222', NULL, NULL, 'student1@example.com', 'password', '', '', '6', '5th', 'Hindi', 'SPPU', NULL, '16_marksheet_1777464141.png', '16_aadhar_1777464141.png', NULL, 0, '23', 0, 0, '', '', '16_student_photo.png', '5000', '3498.00', 1, 1, '2026-05-10 15:06:52'),
-(17, 'Tushar', 'Suryakant', 'Bhale', 'Tushar Suryakant Bhale', '2016-03-05', 'female', '', '', 'addressss', '1111111111', '1111111111', NULL, NULL, 'student@example.com', 'password', '', '', '1', '10', 'English', 'CBSE', NULL, '17_mark_sheet.jpg', '17_government_identity.jpg', '0', 1, '', 1, 1, '', '', '17_photo.jpg', '2000', '1230', 1, 0, '2026-05-10 15:06:52'),
+(17, 'Tushar', 'Suryakant', 'Bhale', 'Tushar Suryakant Bhale', '2016-03-05', 'female', '', '', 'addressss', '1111111111', '1111111111', '', '100099283', 'student@example.com', 'password', 'Suryakant Bhale', '', '3', '2nd', 'English', 'CBSE', NULL, '17_mark_sheet.jpg', '17_aadhar_1778914310.png', NULL, 1, '', 1, 1, '', '', '17_photo.jpg', '2000', NULL, 1, 0, '2026-05-10 15:06:52'),
 (19, 'Manushri', 'Sakhi Tushar', 'Bhale', 'Manushri Sakhi Tushar Bhale', '2023-04-04', 'female', '', '', 'Address', '', '1234567890', NULL, NULL, 'tussharbhale@gmail.com', '$2y$10$HC8Ez4EVHkRJ/D08tchQ8OkbDdiwBcQwvb6D02PeStUkctw4eLJuO', '', '', '2', '1st', 'English', 'CBSE', NULL, '19_marksheet_1778387699.jpg', '19_aadhar_1778387699.png', NULL, 0, '', 0, 0, '', '', '19_photo_1778387699.png', '3000', '1000', 1, 0, '2026-05-10 15:06:52'),
 (20, 'shreestudent1', 'shreestudent1', 'shreestudent1', 'shreestudent1 shreestudent1 shreestudent1', '2026-05-07', 'male', '', '', 'Address', '', '1234567890', NULL, NULL, 'shreestudent1@yopmail.com', '$2y$10$VS3z9EqLEhJC6H.z355obODXGCe1ptKpFfMxVKE9pw/CfZCJGgvtW', '', '', '3', '2nd', 'English', 'State Board', NULL, NULL, NULL, NULL, 0, '', 0, 0, '', '', NULL, '3000', '1000', 1, 0, '2026-05-10 15:06:52'),
 (21, 'Shriya', 'middlename', 'Muni', 'Shriya middlename Muni', '2025-01-15', 'female', '', '', 'Address', '', '9619577572', '', '', 'shreestudent1@yopmail.com', '$2y$10$.c9HegHbQQ3KLPTZK.WYse4QByLvbgqH1iULoR8mvmWEWQ6ZSD2ce', '', '', '3', '2nd', 'Hindi', 'Mumbai University', NULL, NULL, NULL, NULL, 0, '', 0, 0, '', '', NULL, '3000', '1397.00', 1, 0, '2026-05-10 15:06:52'),
@@ -8976,16 +9095,54 @@ CREATE TABLE `teacher` (
   `phone` longtext NOT NULL,
   `email` longtext NOT NULL,
   `password` longtext NOT NULL,
-  `authentication_key` longtext NOT NULL
+  `authentication_key` longtext NOT NULL,
+  `teacher_photo` varchar(255) DEFAULT NULL,
+  `designation` varchar(100) DEFAULT NULL,
+  `joining_date` date DEFAULT NULL,
+  `pan_number` varchar(20) DEFAULT NULL,
+  `bank_account` varchar(40) DEFAULT NULL,
+  `basic_salary` decimal(10,2) DEFAULT 0.00,
+  `hra` decimal(10,2) DEFAULT 0.00,
+  `da` decimal(10,2) DEFAULT 0.00,
+  `conveyance` decimal(10,2) DEFAULT 0.00,
+  `medical_allowance` decimal(10,2) DEFAULT 0.00,
+  `other_allowance` decimal(10,2) DEFAULT 0.00,
+  `pf_deduction` decimal(10,2) DEFAULT 0.00,
+  `tax_deduction` decimal(10,2) DEFAULT 0.00,
+  `other_deduction` decimal(10,2) DEFAULT 0.00,
+  `total_salary` decimal(10,2) DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 --
 -- Dumping data for table `teacher`
 --
 
-INSERT INTO `teacher` (`teacher_id`, `name`, `birthday`, `sex`, `religion`, `blood_group`, `address`, `phone`, `email`, `password`, `authentication_key`) VALUES
-(5, 'Sakshi Bhale', '04/25/1990', 'female', '', '', 'Kasheli', '9833963867', 'geetp20@gmail.com', '123456789', ''),
-(6, 'Parashant Muni', '04/30/1982', 'male', '', '', 'Thane', '1234567890', 'prashant.muni@gmail.com', '123456789', '');
+INSERT INTO `teacher` (`teacher_id`, `name`, `birthday`, `sex`, `religion`, `blood_group`, `address`, `phone`, `email`, `password`, `authentication_key`, `teacher_photo`, `designation`, `joining_date`, `pan_number`, `bank_account`, `basic_salary`, `hra`, `da`, `conveyance`, `medical_allowance`, `other_allowance`, `pf_deduction`, `tax_deduction`, `other_deduction`, `total_salary`) VALUES
+(5, 'Sakshi Bhale', '04/25/1990', 'female', '', 'O+', 'Kasheli', '9833963867', 'geetp20@gmail.com', '123456789', '', '5_photo_1778914071.jpg', 'Senior Teacher', '2025-06-01', 'ASERR4433I', '3300330023', 25000.00, 12500.00, 5000.00, 2500.00, 2500.00, 2500.00, 1800.00, 200.00, 0.00, 48000.00),
+(6, 'Parashant Muni', '04/30/1982', 'male', '', '', 'Thane', '1234567890', 'prashant.muni@gmail.com', '123456789', '', NULL, NULL, NULL, NULL, NULL, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `teacher_attendance`
+--
+
+CREATE TABLE `teacher_attendance` (
+  `attendance_id` int(11) NOT NULL,
+  `teacher_id` int(11) NOT NULL,
+  `date` date NOT NULL,
+  `status` int(11) NOT NULL DEFAULT 0 COMMENT '0 undefined, 1 present, 2 absent'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+--
+-- Dumping data for table `teacher_attendance`
+--
+
+INSERT INTO `teacher_attendance` (`attendance_id`, `teacher_id`, `date`, `status`) VALUES
+(1, 6, '2026-05-16', 0),
+(2, 5, '2026-05-16', 1),
+(3, 6, '2026-05-15', 1),
+(4, 5, '2026-05-15', 1);
 
 -- --------------------------------------------------------
 
@@ -9199,6 +9356,14 @@ ALTER TABLE `examquestion`
   ADD PRIMARY KEY (`examquestion_id`);
 
 --
+-- Indexes for table `exam_assignment`
+--
+ALTER TABLE `exam_assignment`
+  ADD PRIMARY KEY (`assignment_id`),
+  ADD KEY `exam_key` (`class_id`,`subject_id`,`date`,`duration`,`session`),
+  ADD KEY `student_id` (`student_id`);
+
+--
 -- Indexes for table `exam_result`
 --
 ALTER TABLE `exam_result`
@@ -9269,6 +9434,14 @@ ALTER TABLE `librarian`
 --
 ALTER TABLE `loan`
   ADD PRIMARY KEY (`loan_id`);
+
+--
+-- Indexes for table `lookup_value`
+--
+ALTER TABLE `lookup_value`
+  ADD PRIMARY KEY (`lookup_id`),
+  ADD UNIQUE KEY `cat_val` (`category`,`value`),
+  ADD KEY `category` (`category`);
 
 --
 -- Indexes for table `mark`
@@ -9373,6 +9546,13 @@ ALTER TABLE `teacher`
   ADD PRIMARY KEY (`teacher_id`);
 
 --
+-- Indexes for table `teacher_attendance`
+--
+ALTER TABLE `teacher_attendance`
+  ADD PRIMARY KEY (`attendance_id`),
+  ADD UNIQUE KEY `teacher_date` (`teacher_id`,`date`);
+
+--
 -- Indexes for table `todays_thought`
 --
 ALTER TABLE `todays_thought`
@@ -9425,7 +9605,7 @@ ALTER TABLE `alumni`
 -- AUTO_INCREMENT for table `answer`
 --
 ALTER TABLE `answer`
-  MODIFY `answer_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=286;
+  MODIFY `answer_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=326;
 
 --
 -- AUTO_INCREMENT for table `assignment`
@@ -9437,7 +9617,7 @@ ALTER TABLE `assignment`
 -- AUTO_INCREMENT for table `attendance`
 --
 ALTER TABLE `attendance`
-  MODIFY `attendance_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
+  MODIFY `attendance_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=31;
 
 --
 -- AUTO_INCREMENT for table `banar`
@@ -9518,6 +9698,12 @@ ALTER TABLE `examquestion`
   MODIFY `examquestion_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
+-- AUTO_INCREMENT for table `exam_assignment`
+--
+ALTER TABLE `exam_assignment`
+  MODIFY `assignment_id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `exam_result`
 --
 ALTER TABLE `exam_result`
@@ -9527,7 +9713,7 @@ ALTER TABLE `exam_result`
 -- AUTO_INCREMENT for table `expense_category`
 --
 ALTER TABLE `expense_category`
-  MODIFY `expense_category_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `expense_category_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `front_end`
@@ -9590,6 +9776,12 @@ ALTER TABLE `loan`
   MODIFY `loan_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
+-- AUTO_INCREMENT for table `lookup_value`
+--
+ALTER TABLE `lookup_value`
+  MODIFY `lookup_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+
+--
 -- AUTO_INCREMENT for table `mark`
 --
 ALTER TABLE `mark`
@@ -9641,7 +9833,7 @@ ALTER TABLE `payment`
 -- AUTO_INCREMENT for table `question`
 --
 ALTER TABLE `question`
-  MODIFY `question_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+  MODIFY `question_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=46;
 
 --
 -- AUTO_INCREMENT for table `section`
@@ -9690,6 +9882,12 @@ ALTER TABLE `task_manager`
 --
 ALTER TABLE `teacher`
   MODIFY `teacher_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+
+--
+-- AUTO_INCREMENT for table `teacher_attendance`
+--
+ALTER TABLE `teacher_attendance`
+  MODIFY `attendance_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `todays_thought`
