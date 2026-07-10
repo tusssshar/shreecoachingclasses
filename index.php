@@ -55,6 +55,25 @@
  */
 	//define('ENVIRONMENT', isset($_SERVER['CI_ENV']) ? $_SERVER['CI_ENV'] : 'production');
     define('ENVIRONMENT', 'development');
+
+/*
+ * Compatibility for CodeIgniter QUERY_STRING routing.
+ * The app routes pages as index.php?admin/method, so extra query parameters
+ * after an ampersand become part of the routed URI. Keep this narrow for the
+ * weekly timetable print link people may type/bookmark.
+ */
+if (isset($_SERVER['QUERY_STRING']) && strpos($_SERVER['QUERY_STRING'], 'admin/weekly_timetable&') === 0) {
+	$weekly_tt_query = substr($_SERVER['QUERY_STRING'], strlen('admin/weekly_timetable&'));
+	parse_str($weekly_tt_query, $weekly_tt_params);
+	$weekly_tt_route = 'admin/weekly_timetable';
+	if (isset($weekly_tt_params['view']) && $weekly_tt_params['view'] === 'print') {
+		$weekly_tt_route .= '/print';
+	}
+	if (!empty($weekly_tt_params['start']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $weekly_tt_params['start'])) {
+		$weekly_tt_route .= '/' . $weekly_tt_params['start'];
+	}
+	$_SERVER['QUERY_STRING'] = $weekly_tt_route;
+}
 /*
  *---------------------------------------------------------------
  * ERROR REPORTING

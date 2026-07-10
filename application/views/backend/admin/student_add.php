@@ -111,7 +111,7 @@
 					<div class="form-group">
 						<label class="col-sm-3 control-label">Standard</label>
 						<div class="col-sm-5">
-							<select class="form-control" name="class_id" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>">
+							<select class="form-control" name="class_id" id="add_class_id" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>" onchange="toggleStudentMobile()">
 								<option value="">-Select-</option>
 								<?php
 								$classes = $this->db->get('class')->result_array();
@@ -119,12 +119,33 @@
 									return strnatcasecmp($a['name_numeric'], $b['name_numeric']);
 								});
 								foreach ($classes as $class):
+									$nm = (int)($class['name_numeric'] ?? 0);
 								?>
-									<option value="<?php echo $class['class_id']; ?>"><?php echo $class['name']; ?></option>
+									<option value="<?php echo $class['class_id']; ?>" data-class-numeric="<?php echo $nm; ?>"><?php echo $class['name']; ?></option>
 								<?php endforeach; ?>
 							</select>
 						</div>
 					</div>
+
+					<!-- Student Mobile (only when class >= 10) -->
+					<div class="form-group" id="add_student_mobile_row" style="display:none;">
+						<label class="col-sm-3 control-label">Student Mobile</label>
+						<div class="col-sm-5">
+							<input type="text" class="form-control" name="student_mobile" pattern="^[0-9]{10}$" title="10-digit mobile number">
+							<small class="text-muted">Shown for Class 10 and above only.</small>
+						</div>
+					</div>
+					<script>
+					function toggleStudentMobile() {
+						var sel = document.getElementById('add_class_id');
+						var row = document.getElementById('add_student_mobile_row');
+						if (!sel || !row) return;
+						var opt = sel.options[sel.selectedIndex];
+						var n = opt ? parseInt(opt.getAttribute('data-class-numeric') || '0', 10) : 0;
+						row.style.display = (n >= 10) ? '' : 'none';
+					}
+					document.addEventListener('DOMContentLoaded', toggleStudentMobile);
+					</script>
 
 					<!-- Medium -->
 					<div class="form-group">
@@ -190,6 +211,27 @@
 						</div>
 					</div>
 
+					<!-- Academic Year (Batch) -->
+					<div class="form-group">
+						<label class="col-sm-3 control-label">Academic Year</label>
+						<div class="col-sm-5">
+							<?php
+								$__ay_year  = (int)date('Y');
+								$__ay_month = (int)date('n');
+								$current_ay = $__ay_month >= 4 ? ($__ay_year . '-' . ($__ay_year + 1)) : (($__ay_year - 1) . '-' . $__ay_year);
+								$__ays = $this->crud_model->academic_years(array($current_ay));
+							?>
+							<select class="form-control" name="academic_year" required>
+								<?php foreach ($__ays as $ay): ?>
+									<option value="<?php echo htmlspecialchars($ay); ?>" <?php if ($ay === $current_ay) echo 'selected'; ?>>
+										<?php echo htmlspecialchars($ay); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+							<small class="text-muted">Manage available years via <strong>Manage Academic Year</strong>.</small>
+						</div>
+					</div>
+
 					<!-- PAYMENT SECTION -->
 					<hr>
 					<h4 style="margin-left:20px;">Payment Section</h4>
@@ -226,14 +268,65 @@
 					<div class="form-group">
 						<label class="col-sm-3 control-label">Mode of Payment</label>
 						<div class="col-sm-5">
-							<select class="form-control" name="payment1_mode">
-								<option value="">-Select-</option>
-								<?php foreach ($this->crud_model->get_lookup_values('payment_mode', array('Cash','Online','Cheque')) as $opt): ?>
+							<select class="form-control payment-mode" data-pay-index="1" name="payment1_mode" onchange="togglePaymentDetails(1)">
+								<option value="">— e.g. UPI / Cash / Cheque —</option>
+								<?php foreach ($this->crud_model->get_lookup_values('payment_mode', array('Cash','Online','UPI','Cheque')) as $opt): ?>
 									<option value="<?php echo htmlspecialchars($opt); ?>"><?php echo htmlspecialchars($opt); ?></option>
 								<?php endforeach; ?>
 							</select>
 						</div>
 					</div>
+
+					<!-- Transaction details (shown when mode is Online / UPI / NEFT / etc.) -->
+					<div class="form-group payment-txn-row" id="payment1_txn_row" style="display:none;">
+						<label class="col-sm-3 control-label">Transaction / Reference ID</label>
+						<div class="col-sm-5">
+							<input type="text" class="form-control" name="payment1_transaction_id" placeholder="UPI Ref / NEFT UTR / Card txn id">
+						</div>
+					</div>
+
+					<!-- Cheque details (shown when mode is Cheque) -->
+					<div class="form-group payment-cheque-row" id="payment1_cheque_row" style="display:none;">
+						<label class="col-sm-3 control-label">Cheque Number</label>
+						<div class="col-sm-3">
+							<input type="text" class="form-control" name="payment1_cheque_number" placeholder="123456">
+						</div>
+						<label class="col-sm-2 control-label">Bank</label>
+						<div class="col-sm-3">
+							<input type="text" class="form-control" name="payment1_cheque_bank" placeholder="Bank name">
+						</div>
+					</div>
+					<div class="form-group payment-cheque-row" id="payment1_cheque_date_row" style="display:none;">
+						<label class="col-sm-3 control-label">Cheque Date</label>
+						<div class="col-sm-3">
+							<input type="date" class="form-control" name="payment1_cheque_date">
+						</div>
+					</div>
+
+					<script>
+					function togglePaymentDetails(idx) {
+						var sel = document.querySelector('.payment-mode[data-pay-index="' + idx + '"]');
+						if (!sel) return;
+						var mode = (sel.value || '').toLowerCase();
+						var isCheque = mode === 'cheque' || mode === 'check';
+						var isTxn    = mode === 'online' || mode === 'upi' || mode === 'neft' || mode === 'rtgs' || mode === 'card' || mode === 'imps';
+						var ids = [
+							'payment' + idx + '_txn_row',
+							'payment' + idx + '_cheque_row',
+							'payment' + idx + '_cheque_date_row',
+						];
+						ids.forEach(function (id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+						if (isCheque) {
+							var c1 = document.getElementById('payment' + idx + '_cheque_row');
+							var c2 = document.getElementById('payment' + idx + '_cheque_date_row');
+							if (c1) c1.style.display = '';
+							if (c2) c2.style.display = '';
+						} else if (isTxn) {
+							var t = document.getElementById('payment' + idx + '_txn_row');
+							if (t) t.style.display = '';
+						}
+					}
+					</script>
 
 					<!-- DOCUMENT SECTION -->
 					<hr>

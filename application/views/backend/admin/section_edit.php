@@ -76,6 +76,17 @@ foreach ($edit_data as $row):
                     </div>
 
                     <div class="form-group">
+                        <label class="col-sm-3 control-label">Session</label>
+                        <div class="col-sm-5">
+                            <select name="session_name" class="form-control">
+                                <option value="" <?php if (empty($row['session_name'])) echo 'selected'; ?>>Auto by time</option>
+                                <option value="morning" <?php if (($row['session_name'] ?? '') === 'morning') echo 'selected'; ?>>Morning Section</option>
+                                <option value="afternoon" <?php if (($row['session_name'] ?? '') === 'afternoon') echo 'selected'; ?>>Afternoon Section</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
                         <label class="col-sm-3 control-label">Start Time</label>
                         <div class="col-sm-5">
                             <input type="time" class="form-control" name="start_time" value="<?php echo $row['start_time']; ?>" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>">
@@ -86,6 +97,20 @@ foreach ($edit_data as $row):
                         <label class="col-sm-3 control-label">End Time</label>
                         <div class="col-sm-5">
                             <input type="time" class="form-control" name="end_time" value="<?php echo $row['end_time']; ?>" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">Revision Section</label>
+                        <div class="col-sm-5">
+                            <input type="text" class="form-control" name="revision_section" value="<?php echo htmlspecialchars($row['revision_section'] ?? ''); ?>">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">Lecture Subject</label>
+                        <div class="col-sm-5">
+                            <input type="text" class="form-control" name="lecture_subject" value="<?php echo htmlspecialchars($row['lecture_subject'] ?? ''); ?>">
                         </div>
                     </div>
 

@@ -3,20 +3,20 @@
             
                 <div class="panel-heading">
                     <div class="panel-title">
-					 <?php echo get_phrase('manage_session_information'); ?>
+					 Manage Academic Year
 					</div>
 					</div>
 <div class="table-responsive">
-				
+
     	<!------CONTROL TABS START------>
 		<ul class="nav nav-tabs bordered">
 			<li class="active">
-            	<a href="#list" data-toggle="tab"><i class="entypo-menu"></i> 
-					<?php echo get_phrase('session_list');?>
+            	<a href="#list" data-toggle="tab"><i class="entypo-menu"></i>
+					Academic Year List
                     	</a></li>
 			<li>
             	<a href="#add" data-toggle="tab"><i class="entypo-plus-circled"></i>
-					<?php echo get_phrase('add_session');?>
+					Add Academic Year
                     	</a></li>
 		</ul>
     	<!------CONTROL TABS END------>
@@ -29,7 +29,7 @@
                 	<thead>
                 		<tr>
                     		<th><div>#</div></th>
-                    		<th><div><?php echo get_phrase('session_name');?></div></th>
+                    		<th><div>Academic Year</div></th>
                     		<th><div><?php echo get_phrase('options');?></div></th>
 						</tr>
 					</thead>
@@ -78,15 +78,15 @@
                 	<?php echo form_open(base_url() . 'index.php?admin/session/create' , array('class' => 'form-horizontal form-groups-bordered validate','target'=>'_top'));?>
                         <div class="padded">
                             <div class="form-group">
-                                <label class="col-sm-3 control-label"><?php echo get_phrase('name');?></label>
+                                <label class="col-sm-3 control-label">Academic Year</label>
                                 <div class="col-sm-5">
-                                    <input type="text" class="form-control" name="name" placeholder="example 2016-2018" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>"/>
+                                    <input type="text" class="form-control" name="name" placeholder="e.g. 2025-2026" pattern="^\d{4}-\d{4}$" title="Format: YYYY-YYYY" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>"/>
                                 </div>
                             </div>
-                            
+
                         <div class="form-group">
                               <div class="col-sm-offset-3 col-sm-5">
-                                  <button type="submit" class="btn btn-blue btn-sm btn-icon icon-left"><i class="fa fa-save"></i>&nbsp;<?php echo get_phrase('add_session');?></button>
+                                  <button type="submit" class="btn btn-blue btn-sm btn-icon icon-left"><i class="fa fa-save"></i>&nbsp;Add Academic Year</button>
                               </div>
 							</div>
                     </form>                

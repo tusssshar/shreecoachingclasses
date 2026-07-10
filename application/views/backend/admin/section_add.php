@@ -66,6 +66,17 @@
                     </div>
 
                     <div class="form-group">
+                        <label class="col-sm-3 control-label">Session</label>
+                        <div class="col-sm-5">
+                            <select name="session_name" class="form-control">
+                                <option value="">Auto by time</option>
+                                <option value="morning">Morning Section</option>
+                                <option value="afternoon">Afternoon Section</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
                         <label class="col-sm-3 control-label">Start Time</label>
                         <div class="col-sm-5">
                             <input type="time" class="form-control" name="start_time" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>">
@@ -76,6 +87,20 @@
                         <label class="col-sm-3 control-label">End Time</label>
                         <div class="col-sm-5">
                             <input type="time" class="form-control" name="end_time" data-validate="required" data-message-required="<?php echo get_phrase('value_required');?>">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">Revision Section</label>
+                        <div class="col-sm-5">
+                            <input type="text" class="form-control" name="revision_section" placeholder="GEOGRAPHY / REVISION OF ENGLISH">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="col-sm-3 control-label">Lecture Subject</label>
+                        <div class="col-sm-5">
+                            <input type="text" class="form-control" name="lecture_subject" placeholder="ENGLISH / SCIENCE">
                         </div>
                     </div>
 

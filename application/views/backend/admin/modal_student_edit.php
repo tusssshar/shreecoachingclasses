@@ -40,7 +40,25 @@ foreach ($edit_data as $row):
         '?admin/student/' . $form_class_id . '/do_update/' . $row['student_id'];
 ?>
 
-<div class="row">
+<style>
+/* Edit modal — show data in UPPERCASE for quick scan-readability */
+#student-edit-modal-root input[type=text],
+#student-edit-modal-root input[type=email],
+#student-edit-modal-root input[type=date],
+#student-edit-modal-root textarea,
+#student-edit-modal-root select,
+#student-edit-modal-root .well,
+#student-edit-modal-root .form-control-static {
+    text-transform: uppercase;
+}
+/* Don't uppercase the values inside file pickers / numbers */
+#student-edit-modal-root input[type=file],
+#student-edit-modal-root input[type=number] {
+    text-transform: none;
+}
+</style>
+
+<div id="student-edit-modal-root" class="row">
 <div class="col-md-12">
 <div class="panel panel-primary">
 
@@ -150,16 +168,38 @@ function inputField($label, $name, $value) {
 <div class="form-group">
     <label class="col-sm-3 control-label">Standard</label>
     <div class="col-sm-5">
-        <select name="class_id" class="form-control">
+        <select name="class_id" id="edit_class_id" class="form-control" onchange="toggleEditStudentMobile()">
             <option value="">-Select-</option>
-            <?php foreach ($classes as $class): ?>
-                <option value="<?php echo $class['class_id']; ?>" <?php if($selected_class_id == $class['class_id']) echo 'selected'; ?>>
+            <?php foreach ($classes as $class): $nm = (int)($class['name_numeric'] ?? 0); ?>
+                <option value="<?php echo $class['class_id']; ?>" data-class-numeric="<?php echo $nm; ?>" <?php if($selected_class_id == $class['class_id']) echo 'selected'; ?>>
                     <?php echo $class['name']; ?>
                 </option>
             <?php endforeach; ?>
         </select>
     </div>
 </div>
+
+<!-- Student Mobile (only when class >= 10) -->
+<div class="form-group" id="edit_student_mobile_row" style="display:none;">
+    <label class="col-sm-3 control-label">Student Mobile</label>
+    <div class="col-sm-5">
+        <input type="text" class="form-control" name="student_mobile" value="<?php echo htmlspecialchars($row['student_mobile'] ?? ''); ?>" pattern="^[0-9]{10}$" title="10-digit mobile number">
+        <small class="text-muted">Shown for Class 10 and above only.</small>
+    </div>
+</div>
+<script>
+function toggleEditStudentMobile() {
+    var sel = document.getElementById('edit_class_id');
+    var row = document.getElementById('edit_student_mobile_row');
+    if (!sel || !row) return;
+    var opt = sel.options[sel.selectedIndex];
+    var n = opt ? parseInt(opt.getAttribute('data-class-numeric') || '0', 10) : 0;
+    row.style.display = (n >= 10) ? '' : 'none';
+}
+document.addEventListener('DOMContentLoaded', toggleEditStudentMobile);
+// Also run immediately for AJAX-loaded modal (DOMContentLoaded already fired in some cases)
+toggleEditStudentMobile();
+</script>
 
 <div class="form-group">
     <label class="col-sm-3 control-label">Board</label>
@@ -202,6 +242,48 @@ function inputField($label, $name, $value) {
     </div>
 </div>
 
+<div class="form-group">
+    <label class="col-sm-3 control-label">Re-registered</label>
+    <div class="col-sm-5">
+        <label class="radio-inline">
+            <input type="radio" name="is_reregister" value="1" <?php if(!empty($row['is_reregister'])) echo 'checked'; ?>> Yes
+        </label>
+        <label class="radio-inline">
+            <input type="radio" name="is_reregister" value="0" <?php if(empty($row['is_reregister'])) echo 'checked'; ?>> No
+        </label>
+        <small class="text-muted" style="display:block; margin-top:4px;">
+            Auto-set when a student is created via the Re-register flow. Toggle here for manual correction.
+            <?php if (!empty($row['previous_student_id'])): ?>
+                <br><strong>Previous record:</strong> STU-<?php echo str_pad((int)$row['previous_student_id'], 5, '0', STR_PAD_LEFT); ?>
+            <?php endif; ?>
+        </small>
+    </div>
+</div>
+
+<!-- Academic Year (Batch) -->
+<div class="form-group">
+    <label class="col-sm-3 control-label">Academic Year</label>
+    <div class="col-sm-5">
+        <?php
+            $ay_val = $row['academic_year'] ?? '';
+            if ($ay_val === '') {
+                $__y = (int)date('Y'); $__m = (int)date('n');
+                $ay_val = $__m >= 4 ? ($__y . '-' . ($__y + 1)) : (($__y - 1) . '-' . $__y);
+            }
+            $this->load->model('crud_model');
+            $__ays = $this->crud_model->academic_years(array($ay_val));
+        ?>
+        <select class="form-control" name="academic_year">
+            <?php foreach ($__ays as $ay): ?>
+                <option value="<?php echo htmlspecialchars($ay); ?>" <?php if ($ay === $ay_val) echo 'selected'; ?>>
+                    <?php echo htmlspecialchars($ay); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <small class="text-muted">Manage via <strong>Manage Academic Year</strong>.</small>
+    </div>
+</div>
+
 <hr>
 
 <!-- ================= FEES ================= -->
@@ -211,32 +293,41 @@ function inputField($label, $name, $value) {
     Total: ₹ <?php echo number_format($fee['total_fees'],2); ?> |
     Paid: ₹ <?php echo number_format($fee['paid'],2); ?> |
     <b style="color:red;">Remaining: ₹ <?php echo number_format($fee['remaining'],2); ?></b>
+    <br>
+    <a href="#"
+       onclick="event.preventDefault(); jQuery('#mainModal').modal('hide'); showAjaxModal('<?php echo base_url(); ?>index.php?modal/popup/modal_student_payment_add/<?php echo (int)$row['student_id']; ?>'); return false;"
+       class="btn btn-success btn-sm" style="margin-top:8px;">
+        <i class="entypo-credit-card"></i> Take Payment Now
+    </a>
 </div>
 
-<!-- ================= PAYMENT HISTORY ================= -->
+<?php if (!empty($payments)): ?>
+<!-- ================= PAYMENT HISTORY (read-only) ================= -->
 <h4>Payment History</h4>
-
 <?php foreach ($payments as $i => $p): ?>
 <div class="form-group">
     <label class="col-sm-3 control-label">Payment <?php echo $i+1; ?></label>
     <div class="col-sm-9">
-        <div class="well">
-            ₹ <?php echo $p['amount']; ?> |
-            <?php echo date('d M Y',$p['timestamp']); ?> |
-            <?php echo $p['payment_type']; ?> |
-            <?php echo $p['method']; ?>
+        <div class="well" style="margin-bottom:6px;">
+            <strong>₹ <?php echo number_format((float)$p['amount'], 2); ?></strong>
+            &nbsp;|&nbsp; <?php echo date('d M Y', (int)$p['timestamp']); ?>
+            &nbsp;|&nbsp; <?php echo htmlspecialchars($p['payment_type'] ?? '-'); ?>
+            &nbsp;|&nbsp; <?php echo htmlspecialchars($p['method'] ?? '-'); ?>
+            <?php if (!empty($p['transaction_id'])): ?>
+                <br><small><strong>Txn ID:</strong> <?php echo htmlspecialchars($p['transaction_id']); ?></small>
+            <?php endif; ?>
+            <?php if (!empty($p['cheque_number'])): ?>
+                <br><small>
+                    <strong>Cheque #:</strong> <?php echo htmlspecialchars($p['cheque_number']); ?>
+                    <?php if (!empty($p['cheque_bank'])): ?> | <strong>Bank:</strong> <?php echo htmlspecialchars($p['cheque_bank']); ?><?php endif; ?>
+                    <?php if (!empty($p['cheque_date'])): ?> | <strong>Date:</strong> <?php echo htmlspecialchars($p['cheque_date']); ?><?php endif; ?>
+                </small>
+            <?php endif; ?>
         </div>
     </div>
 </div>
 <?php endforeach; ?>
-
-<div id="payment-container"></div>
-
-<div class="form-group">
-    <div class="col-sm-offset-3 col-sm-9">
-        <button type="button" class="btn btn-info" onclick="addMorePayment()">+ Add Payment</button>
-    </div>
-</div>
+<?php endif; ?>
 
 <hr>
 
@@ -322,37 +413,5 @@ $(function(){
     dob.on('change', updateAge);
 });
 
-<?php
-    $this->load->model('crud_model');
-    $__pt_opts = '';
-    foreach ($this->crud_model->get_lookup_values('payment_type', array('Admission','Installment')) as $o) {
-        $__pt_opts .= '<option value="' . htmlspecialchars($o, ENT_QUOTES) . '">' . htmlspecialchars($o) . '</option>';
-    }
-    $__pm_opts = '';
-    foreach ($this->crud_model->get_lookup_values('payment_mode', array('Cash','Online','Cheque')) as $o) {
-        $__pm_opts .= '<option value="' . htmlspecialchars($o, ENT_QUOTES) . '">' . htmlspecialchars($o) . '</option>';
-    }
-?>
-/* ADD PAYMENT */
-function addMorePayment() {
-    let count = $('.payment-extra').length + 1;
-
-    $('#payment-container').append(`
-    <div class="form-group payment-extra">
-        <label class="col-sm-3 control-label">Payment ${count}</label>
-        <div class="col-sm-9">
-            <input type="number" name="payment${count}_amount" placeholder="Amount" class="form-control"><br>
-            <input type="date" name="payment${count}_date" class="form-control"><br>
-            <select name="payment${count}_type" class="form-control">
-                <option value="">-Select-</option>
-                <?php echo $__pt_opts; ?>
-            </select><br>
-            <select name="payment${count}_mode" class="form-control">
-                <option value="">-Select-</option>
-                <?php echo $__pm_opts; ?>
-            </select>
-        </div>
-    </div>
-    `);
-}
+/* Payments are now handled via the separate "Take Payment" action on the student row. */
 </script>

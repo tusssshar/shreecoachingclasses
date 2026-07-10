@@ -1,5 +1,27 @@
 <hr>
-<div class="panel panel-gradient">
+<style>
+.salary-slip-panel .panel-body { padding: 14px 18px; }
+.salary-summary {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 14px;
+    margin-bottom: 12px;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+.salary-summary .box {
+    border: 1px solid #d9dee8;
+    background: #fafbfe;
+    padding: 10px 12px;
+    border-radius: 4px;
+}
+.salary-slip-panel .form-group { margin-bottom: 9px; }
+.salary-slip-panel .control-label { padding-top: 6px; }
+@media (max-width: 767px) {
+    .salary-summary { grid-template-columns: 1fr; }
+}
+</style>
+<div class="panel panel-gradient salary-slip-panel">
     <div class="panel-heading">
         <div class="panel-title">
             Generate Salary Slip — <?php echo htmlspecialchars($teacher['name']); ?>
@@ -17,22 +39,23 @@
             $pf      = (float)$teacher['pf_deduction'];
             $tax     = (float)$teacher['tax_deduction'];
             $otherD  = (float)$teacher['other_deduction'];
-            $ctc     = $basic + $hra + $da + $conv + $medical + $otherA;
-            $net     = max(0, $ctc - ($pf + $tax + $otherD));
+            // CTC / net computed by sms_core_helper (unit tested).
+            $ctc     = sms_salary_ctc($teacher);
+            $net     = sms_salary_net($teacher);
         ?>
 
         <?php
             $jd = $teacher['joining_date'] ?? '';
             $jd_display = ($jd && $jd !== '0000-00-00') ? date('d M Y', strtotime($jd)) : '-';
         ?>
-        <div class="row" style="margin-bottom:15px;">
-            <div class="col-sm-6">
+        <div class="salary-summary">
+            <div class="box">
                 <strong>Designation:</strong> <?php echo htmlspecialchars($teacher['designation'] ?? '-'); ?><br>
                 <strong>Joining Date:</strong> <?php echo $jd_display; ?><br>
                 <strong>PAN:</strong> <?php echo htmlspecialchars($teacher['pan_number'] ?? '-'); ?><br>
                 <strong>Bank A/C:</strong> <?php echo htmlspecialchars($teacher['bank_account'] ?? '-'); ?>
             </div>
-            <div class="col-sm-6">
+            <div class="box">
                 <strong>Basic:</strong> <?php echo number_format($basic, 2); ?> &nbsp;
                 <strong>HRA (50%):</strong> <?php echo number_format($hra, 2); ?><br>
                 <strong>DA (20%):</strong> <?php echo number_format($da, 2); ?> &nbsp;

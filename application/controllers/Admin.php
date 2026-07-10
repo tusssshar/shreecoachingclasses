@@ -14,6 +14,838 @@ class Admin extends CI_Controller
 {
     public $export_service;
 
+    /**
+     * Weekly timetable — one page showing every teacher's lectures across the week.
+     * Rows = teachers, columns = days Mon-Sun, cells list each lecture with class +
+     * start-end times. Auto-prints when ?print=1 is appended.
+     */
+    function weekly_timetable($mode = '', $start = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_teacher_timetable_columns();
+
+        if ($start === '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$mode)) {
+            $start = $mode;
+            $mode = '';
+        }
+
+        $start_raw = $start ?: $this->input->get('start');
+        $start_ts = $start_raw ? strtotime($start_raw) : strtotime('monday this week');
+        if (!$start_ts) $start_ts = strtotime('monday this week');
+        $week_start = date('Y-m-d', $start_ts);
+        $week_end   = date('Y-m-d', strtotime($week_start . ' +6 days'));
+
+        // pull every timetable row with its teacher + class
+        $this->db->select('s.section_id, s.name section_name, s.nick_name, s.days, s.start_time, s.end_time, '
+                        . 's.session_name, s.revision_section, s.lecture_subject, '
+                        . 'c.name class_name, c.name_numeric, t.teacher_id, t.name teacher_name');
+        $this->db->from('section s');
+        $this->db->join('class c',   'c.class_id   = s.class_id',   'left');
+        $this->db->join('teacher t', 't.teacher_id = s.teacher_id', 'left');
+        $this->db->order_by('c.name_numeric, c.name, s.start_time');
+        $sections = $this->db->get()->result_array();
+
+        $day_dates = array();
+        for ($i = 0; $i < 7; $i++) {
+            $ts = strtotime($week_start . ' +' . $i . ' days');
+            $day_dates[date('l', $ts)] = array(
+                'date'  => date('Y-m-d', $ts),
+                'label' => date('d/m/Y', $ts),
+                'day'   => strtoupper(date('l', $ts))
+            );
+        }
+
+        $by_day = array();
+        foreach ($day_dates as $day => $meta) {
+            $by_day[$day] = array('meta' => $meta, 'morning' => array(), 'afternoon' => array());
+        }
+
+        foreach ($sections as $r) {
+            $days = !empty($r['days']) ? explode(',', $r['days']) : array();
+            foreach ($days as $d) {
+                $d = trim($d);
+                if ($d === '' || !isset($by_day[$d])) continue;
+
+                $session = strtolower((string)($r['session_name'] ?? ''));
+                if ($session !== 'morning' && $session !== 'afternoon') {
+                    $hour = !empty($r['start_time']) ? (int)date('G', strtotime($r['start_time'])) : 0;
+                    $session = ($hour > 0 && $hour < 12) ? 'morning' : 'afternoon';
+                }
+                $by_day[$d][$session][] = array(
+                    'std'              => $r['class_name'] ?: '-',
+                    'time'             => $this->format_timetable_time_range($r['start_time'], $r['end_time']),
+                    'revision_section' => $r['revision_section'] ?: '',
+                    'teacher'          => $r['teacher_name'] ?: '',
+                    'lecture_subject'  => $r['lecture_subject'] ?: ($r['nick_name'] ?: $r['section_name']),
+                    'start'            => $r['start_time'],
+                    'class_sort'       => (int)($r['name_numeric'] ?? 0)
+                );
+            }
+        }
+
+        foreach ($by_day as &$day_group) {
+            foreach (array('morning', 'afternoon') as $bucket) {
+                usort($day_group[$bucket], function ($a, $b) {
+                    $time_cmp = strcmp((string)$a['start'], (string)$b['start']);
+                    if ($time_cmp !== 0) return $time_cmp;
+                    return $a['class_sort'] <=> $b['class_sort'];
+                });
+            }
+        }
+        unset($day_group);
+
+        $page_data['by_day']       = $by_day;
+        $page_data['week_start']   = $week_start;
+        $page_data['week_end']     = $week_end;
+        $page_data['month_title']  = strtoupper(date('F', strtotime($week_start))) . ' = ' . date('Y', strtotime($week_start));
+        $page_data['date_range']   = date('d/m/Y', strtotime($week_start)) . ' TO ' . date('d/m/Y', strtotime($week_end));
+        $page_data['auto_print']   = ($mode === 'print') || (int)$this->input->get('print') === 1;
+
+        if ($mode === 'print' || $this->input->get('view') === 'print' || $page_data['auto_print']) {
+            $this->load->view('backend/admin/weekly_timetable_print', $page_data);
+            return;
+        }
+
+        $page_data['page_name']  = 'weekly_timetable';
+        $page_data['page_title'] = 'Weekly Timetable';
+        $this->load->view('backend/index', $page_data);
+    }
+
+    private function format_timetable_time_range($start, $end)
+    {
+        if (empty($start) && empty($end)) return '';
+        $fmt = function ($value) {
+            if (empty($value)) return '';
+            return strtoupper(str_replace(' ', '', date('g:i A', strtotime($value))));
+        };
+        $left = $fmt($start);
+        $right = $fmt($end);
+        return trim($left . ($right ? ' TO ' . $right : ''));
+    }
+
+    /**
+     * Reports — Teachers report. Lists every teacher with key salary / contact
+     * details, supports name search, has a print view and an Excel/CSV download.
+     *
+     * URLs:
+     *   admin/report_teachers                          -> HTML report (search by name)
+     *   admin/report_teachers?q=Sakshi                 -> filtered HTML report
+     *   admin/report_teachers/excel?q=Sakshi           -> CSV download (Excel-friendly)
+     *   admin/report_teachers/print?q=Sakshi           -> print-friendly view
+     */
+    function report_teachers($mode = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        // With uri_protocol=QUERY_STRING, a URL like ?admin/report_teachers/excel&ids=5
+        // arrives as $mode = 'excel&ids=5'. Strip query-string remnants so the mode check still works.
+        if (($amp = strpos($mode, '&')) !== false) {
+            $mode = substr($mode, 0, $amp);
+        }
+        $mode = trim($mode);
+
+        $this->ensure_teacher_salary_columns();
+        $q = trim((string)$this->input->get('q'));
+        $ids_raw = trim((string)$this->input->get('ids'));
+        $selected_ids = array();
+        if ($ids_raw !== '') {
+            foreach (explode(',', $ids_raw) as $id) {
+                $id = (int)trim($id);
+                if ($id > 0) $selected_ids[] = $id;
+            }
+            $selected_ids = array_values(array_unique($selected_ids));
+        }
+
+        $this->db->select('teacher_id, name, email, phone, sex, blood_group, designation, joining_date, basic_salary, total_salary');
+        if (!empty($selected_ids)) {
+            $this->db->where_in('teacher_id', $selected_ids);
+        }
+        if ($q !== '') {
+            $this->db->group_start();
+            $this->db->like('name', $q);
+            $this->db->or_like('email', $q);
+            $this->db->or_like('phone', $q);
+            $this->db->or_like('designation', $q);
+            $this->db->group_end();
+        }
+        $this->db->order_by('name', 'asc');
+        $rows = $this->db->get('teacher')->result_array();
+
+        if ($mode === 'excel') {
+            $filename = (!empty($selected_ids) ? 'selected_teachers_' : 'teachers_report_') . date('Ymd') . '.csv';
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Pragma: no-cache');
+            header('Expires: 0');
+            $out = fopen('php://output', 'w');
+            fputcsv($out, array('#','Teacher ID','Name','Designation','Email','Phone','Sex','Blood Group','Joining Date','Basic Salary','Net Salary'));
+            $i = 1;
+            foreach ($rows as $r) {
+                fputcsv($out, array(
+                    $i++,
+                    'TCH-' . str_pad((int)$r['teacher_id'], 4, '0', STR_PAD_LEFT),
+                    $r['name'],
+                    $r['designation'] ?? '',
+                    $r['email'],
+                    $r['phone'],
+                    $r['sex'],
+                    $r['blood_group'] ?? '',
+                    !empty($r['joining_date']) && $r['joining_date'] !== '0000-00-00' ? $r['joining_date'] : '',
+                    (float)($r['basic_salary'] ?? 0),
+                    (float)($r['total_salary'] ?? 0),
+                ));
+            }
+            fclose($out);
+            return;
+        }
+
+        $page_data['rows']       = $rows;
+        $page_data['q']          = $q;
+        $page_data['selected_ids'] = $selected_ids;
+        $page_data['print_mode'] = ($mode === 'print');
+        if ($mode === 'print') {
+            $this->load->view('backend/admin/report_teachers_print', $page_data);
+            return;
+        }
+
+        $page_data['page_name']  = 'report_teachers';
+        $page_data['page_title'] = 'Teachers Report';
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /**
+     * Reports — Students Report. Mirrors the Teachers Report shape: searchable HTML
+     * page, printable view, and CSV export.
+     *
+     * URLs:
+     *   admin/report_students                        -> HTML report
+     *   admin/report_students?q=...                  -> filtered HTML
+     *   admin/report_students/excel?q=...&ids=1,2    -> CSV
+     *   admin/report_students/print?q=...            -> print view
+     */
+    function report_students($mode = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        // Strip query-string tail off mode so '?admin/.../excel&q=foo' still routes correctly
+        if (($amp = strpos($mode, '&')) !== false) $mode = substr($mode, 0, $amp);
+        $mode = trim($mode);
+
+        $this->ensure_student_alumni_column();
+        $q = trim((string)$this->input->get('q'));
+        $ids_raw = trim((string)$this->input->get('ids'));
+        $selected_ids = array();
+        if ($ids_raw !== '') {
+            foreach (explode(',', $ids_raw) as $id) {
+                $id = (int)trim($id);
+                if ($id > 0) $selected_ids[] = $id;
+            }
+            $selected_ids = array_values(array_unique($selected_ids));
+        }
+
+        $this->db->select('student_id, name, first_name, last_name, standard, academic_year, sex, fmobile, email, total_fees, payment_done');
+        $this->db->where('is_active', 1);
+        if ($this->db->field_exists('is_alumni', 'student')) $this->db->where('is_alumni', 0);
+        if (!empty($selected_ids)) $this->db->where_in('student_id', $selected_ids);
+        if ($q !== '') {
+            $this->db->group_start();
+            $this->db->like('name', $q);
+            $this->db->or_like('first_name', $q);
+            $this->db->or_like('last_name', $q);
+            $this->db->or_like('email', $q);
+            $this->db->or_like('fmobile', $q);
+            $this->db->group_end();
+        }
+        $this->db->order_by('name', 'asc');
+        $rows = $this->db->get('student')->result_array();
+
+        if ($mode === 'excel') {
+            $filename = (!empty($selected_ids) ? 'selected_students_' : 'students_report_') . date('Ymd') . '.csv';
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Pragma: no-cache');
+            header('Expires: 0');
+            $out = fopen('php://output', 'w');
+            fputcsv($out, array('#','Student ID','Name','Standard','Academic Year','Sex','Father Mobile','Email','Total Fees','Paid','Balance'));
+            $i = 1;
+            foreach ($rows as $r) {
+                $bal = (float)($r['total_fees'] ?? 0) - (float)($r['payment_done'] ?? 0);
+                fputcsv($out, array(
+                    $i++,
+                    'STU-' . str_pad((int)$r['student_id'], 5, '0', STR_PAD_LEFT),
+                    $r['name'],
+                    $r['standard'],
+                    $r['academic_year'] ?? '',
+                    $r['sex'],
+                    $r['fmobile'],
+                    $r['email'],
+                    (float)($r['total_fees'] ?? 0),
+                    (float)($r['payment_done'] ?? 0),
+                    $bal,
+                ));
+            }
+            fclose($out);
+            return;
+        }
+
+        $page_data['rows']         = $rows;
+        $page_data['q']            = $q;
+        $page_data['selected_ids'] = $selected_ids;
+        $page_data['print_mode']   = ($mode === 'print');
+        if ($mode === 'print') {
+            $this->load->view('backend/admin/report_students_print', $page_data);
+            return;
+        }
+        $page_data['page_name']  = 'report_students';
+        $page_data['page_title'] = 'Students Report';
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /**
+     * Reports — Alumni Report. All students currently flagged as is_alumni = 1.
+     * Same shape as Students Report (search, print, CSV).
+     */
+    function report_alumni($mode = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+        if (($amp = strpos($mode, '&')) !== false) $mode = substr($mode, 0, $amp);
+        $mode = trim($mode);
+
+        $this->ensure_student_alumni_column();
+        $q = trim((string)$this->input->get('q'));
+
+        $this->db->select('student_id, name, standard, academic_year, sex, fmobile, email, total_fees, payment_done');
+        if ($this->db->field_exists('is_alumni', 'student')) {
+            $this->db->where('is_alumni', 1);
+        } else {
+            $this->db->where('1 = 0', null, false);
+        }
+        if ($q !== '') {
+            $this->db->group_start();
+            $this->db->like('name', $q);
+            $this->db->or_like('email', $q);
+            $this->db->or_like('fmobile', $q);
+            $this->db->group_end();
+        }
+        $this->db->order_by('name', 'asc');
+        $rows = $this->db->get('student')->result_array();
+
+        if ($mode === 'excel') {
+            $filename = 'alumni_report_' . date('Ymd') . '.csv';
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            $out = fopen('php://output', 'w');
+            fputcsv($out, array('#','Student ID','Name','Standard','Academic Year','Sex','Father Mobile','Email','Total Fees','Paid'));
+            $i = 1;
+            foreach ($rows as $r) {
+                fputcsv($out, array(
+                    $i++,
+                    'STU-' . str_pad((int)$r['student_id'], 5, '0', STR_PAD_LEFT),
+                    $r['name'],
+                    $r['standard'],
+                    $r['academic_year'] ?? '',
+                    $r['sex'],
+                    $r['fmobile'],
+                    $r['email'],
+                    (float)($r['total_fees'] ?? 0),
+                    (float)($r['payment_done'] ?? 0),
+                ));
+            }
+            fclose($out);
+            return;
+        }
+
+        $page_data['rows'] = $rows;
+        $page_data['q']    = $q;
+        if ($mode === 'print') {
+            $this->load->view('backend/admin/report_alumni_print', $page_data);
+            return;
+        }
+        $page_data['page_name']  = 'report_alumni';
+        $page_data['page_title'] = 'Alumni Report';
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /**
+     * Reports — Re-register History. Every student row with previous_student_id
+     * set (i.e. a re-registration record), joined to the previous row so admins
+     * can audit what came from where.
+     */
+    function report_reregister($mode = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+        if (($amp = strpos($mode, '&')) !== false) $mode = substr($mode, 0, $amp);
+        $mode = trim($mode);
+
+        $this->ensure_student_alumni_column();
+        $q = trim((string)$this->input->get('q'));
+
+        $sql = "SELECT n.student_id new_id, n.name new_name, n.standard new_standard, n.academic_year new_ay, "
+             . "n.total_fees new_total, n.payment_done new_paid, "
+             . "p.student_id prev_id, p.name prev_name, p.standard prev_standard, p.academic_year prev_ay, "
+             . "p.total_fees prev_total, p.payment_done prev_paid "
+             . "FROM student n "
+             . "LEFT JOIN student p ON p.student_id = n.previous_student_id "
+             . "WHERE n.previous_student_id IS NOT NULL AND n.previous_student_id > 0 ";
+        if ($q !== '') {
+            $like = '%' . $this->db->escape_like_str($q) . '%';
+            $sql .= "AND (n.name LIKE '$like' OR p.name LIKE '$like' OR n.fmobile LIKE '$like' OR p.fmobile LIKE '$like') ";
+        }
+        $sql .= "ORDER BY n.student_id DESC";
+        $rows = $this->db->query($sql)->result_array();
+
+        if ($mode === 'excel') {
+            $filename = 'reregister_history_' . date('Ymd') . '.csv';
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            $out = fopen('php://output', 'w');
+            fputcsv($out, array(
+                '#', 'Previous Student ID', 'Previous Name', 'Previous Standard', 'Previous AY', 'Previous Fees', 'Previous Paid',
+                'New Student ID', 'New Name', 'New Standard', 'New AY', 'New Fees', 'New Paid'
+            ));
+            $i = 1;
+            foreach ($rows as $r) {
+                fputcsv($out, array(
+                    $i++,
+                    'STU-' . str_pad((int)$r['prev_id'], 5, '0', STR_PAD_LEFT),
+                    $r['prev_name'],
+                    $r['prev_standard'],
+                    $r['prev_ay'],
+                    (float)$r['prev_total'],
+                    (float)$r['prev_paid'],
+                    'STU-' . str_pad((int)$r['new_id'], 5, '0', STR_PAD_LEFT),
+                    $r['new_name'],
+                    $r['new_standard'],
+                    $r['new_ay'],
+                    (float)$r['new_total'],
+                    (float)$r['new_paid'],
+                ));
+            }
+            fclose($out);
+            return;
+        }
+
+        $page_data['rows'] = $rows;
+        $page_data['q']    = $q;
+        if ($mode === 'print') {
+            $this->load->view('backend/admin/report_reregister_print', $page_data);
+            return;
+        }
+        $page_data['page_name']  = 'report_reregister';
+        $page_data['page_title'] = 'Re-register History';
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /**
+     * Re-registering flow — search any past student (alumni or current) by name,
+     * student ID, or mobile, pick one, and create a fresh student row for the new academic year.
+     * The new row keeps family data and links back via `previous_student_id`.
+     * Previous fees are calculated and can be carried forward if unpaid.
+     *
+     * URLs:
+     *   admin/student_reregister                              -> search screen
+     *   admin/student_reregister?q=<term>                     -> search results (GET)
+     *   admin/student_reregister/save (POST)                  -> save new admission
+     */
+    function student_reregister($mode = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_student_alumni_column();
+
+        if ($mode === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->create_student_payment_history_table();
+            $this->ensure_student_alumni_column();
+
+            $prev_id = (int)$this->input->post('previous_student_id');
+            $prev = $prev_id ? $this->db->get_where('student', array('student_id' => $prev_id))->row_array() : null;
+            if (!$prev) {
+                $this->session->set_flashdata('error_message', 'Previous student not found.');
+                redirect(base_url() . 'index.php?admin/student_reregister', 'refresh');
+            }
+
+            $new_class_id = (int)$this->input->post('class_id') ?: (int)$prev['class_id'];
+            $ay           = $this->input->post('academic_year') ?: $this->academic_year_for();
+            
+            // Calculate pending fees from previous registration
+            $prev_total_fees = (float)($prev['total_fees'] ?? 0);
+            $prev_paid = (float)($prev['payment_done'] ?? 0);
+            if ($this->db->table_exists('student_payment_history')) {
+                $prev_sum = $this->db->select_sum('amount')->where('student_id', $prev_id)->get('student_payment_history')->row();
+                if ($prev_sum && $prev_sum->amount !== null) {
+                    $prev_paid = (float)$prev_sum->amount;
+                }
+            }
+            $pending_fees = max(0, $prev_total_fees - $prev_paid);
+            
+            // Check if user wants to carry forward pending fees
+            $carry_forward_pending = (int)$this->input->post('carry_forward_pending_fees') ?? 0;
+            $new_total_fees = (float)$this->input->post('total_fees');
+            if ($carry_forward_pending && $pending_fees > 0) {
+                $new_total_fees += $pending_fees;
+            }
+
+            // ---- GUARD: payment must not exceed total fees ----
+            // Bug fix (student 29 had total_fees=0, payment_done=10000 -> -10,000 balance).
+            // Compute the payment sum BEFORE inserting the student so we can reject early
+            // and never leave the student row with an impossible negative balance.
+            $payments_preview = $this->extractPaymentsFromPost();
+            $payment_sum_preview = 0.0;
+            foreach ($payments_preview as $pp) $payment_sum_preview += (float)$pp['amount'];
+
+            if ($payment_sum_preview > 0 && $new_total_fees <= 0) {
+                $this->session->set_flashdata('error_message',
+                    'Cannot re-register: a payment of ₹' . number_format($payment_sum_preview, 2) .
+                    ' was entered but new academic-year Total Fees is 0. Set Total Fees first.');
+                redirect(base_url() . 'index.php?admin/student_reregister', 'refresh');
+            }
+            if ($payment_sum_preview > $new_total_fees + 0.01) {
+                $this->session->set_flashdata('error_message',
+                    'Cannot re-register: payment (₹' . number_format($payment_sum_preview, 2) .
+                    ') exceeds Total Fees (₹' . number_format($new_total_fees, 2) .
+                    '). Increase Total Fees or reduce the payment.');
+                redirect(base_url() . 'index.php?admin/student_reregister', 'refresh');
+            }
+
+            $first_name  = trim((string)$this->input->post('first_name'));
+            $middle_name = trim((string)$this->input->post('middle_name'));
+            $last_name   = trim((string)$this->input->post('last_name'));
+            if ($first_name === '') {
+                $first_name = $prev['first_name'] ?? $prev['name'];
+            }
+            $full_name = trim($first_name . ' ' . $middle_name . ' ' . $last_name);
+            if ($full_name === '') {
+                $full_name = $prev['name'];
+            }
+
+            $data = array(
+                'first_name'        => $first_name,
+                'middle_name'       => $middle_name,
+                'last_name'         => $last_name,
+                'name'              => $full_name,
+                'birthday'          => $this->input->post('birthday') ?: ($prev['birthday'] ?? null),
+                'sex'               => $this->input->post('sex') ?: ($prev['sex'] ?? ''),
+                'address'           => $this->input->post('home') ?: ($prev['address'] ?? ''),
+                'father_name'       => $this->input->post('father_name') ?: ($prev['father_name'] ?? ''),
+                'fmobile'           => $this->input->post('fmobile') ?: ($prev['fmobile'] ?? ''),
+                'mother_name'       => $this->input->post('mother_name') ?: ($prev['mother_name'] ?? ''),
+                'mmobile'           => $this->input->post('mmobile') ?: ($prev['mmobile'] ?? ''),
+                'emergency_contact' => $this->input->post('emergency_contact') ?: ($prev['emergency_contact'] ?? ''),
+                'email'             => $this->input->post('email') ?: ($prev['email'] ?? ''),
+                'class_id'          => $new_class_id,
+                'section_id'        => $this->input->post('section_id') ?: ($prev['section_id'] ?? null),
+                'standard'          => $this->get_class_name_for_student($new_class_id),
+                'medium'            => $this->input->post('medium') ?: ($prev['medium'] ?? ''),
+                'board'             => $this->input->post('board')  ?: ($prev['board'] ?? ''),
+                'school'            => $this->input->post('school') ?: ($prev['school'] ?? ''),
+                'is_alumni'         => 0,
+                'is_active'         => 1,
+                'is_reregister'     => 1,                // re-register flow always sets this
+                'academic_year'     => $ay,
+                'previous_student_id' => $prev_id,
+                'total_fees'        => $new_total_fees,
+                'payment_done'      => 0,
+                'student_mobile'    => $this->student_mobile_value_for($new_class_id, $this->input->post('student_mobile') ?: ($prev['student_mobile'] ?? '')),
+                'password'          => $prev['password'] ?: password_hash('password', PASSWORD_BCRYPT),
+            );
+
+            $this->db->insert('student', $data);
+            $new_id = (int)$this->db->insert_id();
+
+            // Reuse the preview we already computed (validated above)
+            $payments = $payments_preview;
+            $total_payment = 0;
+            foreach ($payments as $p) {
+                $total_payment += $p['amount'];
+                $this->db->insert('student_payment_history', array(
+                    'student_id'     => $new_id,
+                    'invoice_id'     => 0,
+                    'title'          => 'Payment',
+                    'payment_type'   => $p['type'],
+                    'method'         => $p['mode'],
+                    'description'    => 'Re-registration payment',
+                    'amount'         => $p['amount'],
+                    'timestamp'      => $p['date'] ? strtotime($p['date']) : time(),
+                    'transaction_id' => isset($p['transaction_id']) ? $p['transaction_id'] : null,
+                    'cheque_number'  => isset($p['cheque_number']) ? $p['cheque_number'] : null,
+                    'cheque_bank'    => isset($p['cheque_bank']) ? $p['cheque_bank'] : null,
+                    'cheque_date'    => isset($p['cheque_date']) && $p['cheque_date'] ? $p['cheque_date'] : null,
+                ));
+            }
+            $this->db->where('student_id', $new_id)->update('student', array('payment_done' => $total_payment));
+            $this->handleStudentFiles($new_id);
+
+            // mark previous as alumni so it disappears from current Student List
+            $this->db->where('student_id', $prev_id)->update('student', array('is_alumni' => 1));
+
+            $msg = 'Re-registered ' . $data['name'] . ' for ' . $ay . '.';
+            if ($carry_forward_pending && $pending_fees > 0) {
+                $msg .= ' Pending fees (₹' . number_format($pending_fees, 2) . ') carried forward.';
+            }
+            $this->session->set_flashdata('flash_message', $msg);
+            redirect(base_url() . 'index.php?admin/student_information/' . $new_class_id, 'refresh');
+        }
+
+        // Handle search - from GET or POST
+        // Only show ACTIVE students (not alumni/not previously re-registered)
+        $q = trim((string)($this->input->get('q') ?? $this->input->post('q')));
+        $matches = array();
+        if ($q !== '') {
+            // Check if search term is numeric (student_id)
+            $is_numeric = is_numeric($q);
+            
+            $this->db->where('(is_alumni = 0 OR is_alumni IS NULL)'); // Only active students
+            $this->db->group_start();
+            if ($is_numeric) {
+                $this->db->where('student_id', (int)$q);
+                $this->db->or_where('CAST(student_id AS CHAR)', $q);
+            }
+            $this->db->like('name', $q);
+            $this->db->or_like('first_name', $q);
+            $this->db->or_like('last_name', $q);
+            $this->db->or_like('fmobile', $q);
+            $this->db->or_like('mmobile', $q);
+            $this->db->or_like('email', $q);
+            $this->db->group_end();
+            $this->db->order_by('student_id', 'desc');
+            $matches = $this->db->limit(40)->get('student')->result_array();
+            
+            // Calculate pending fees for each match
+            foreach ($matches as &$match) {
+                $match['payment_history'] = $this->db->table_exists('student_payment_history')
+                    ? $this->db->order_by('timestamp', 'asc')->get_where('student_payment_history', array('student_id' => $match['student_id']))->result_array()
+                    : array();
+                if (!empty($match['payment_history'])) {
+                    $sum = 0;
+                    foreach ($match['payment_history'] as $payment_row) {
+                        $sum += (float)($payment_row['amount'] ?? 0);
+                    }
+                    $match['payment_done'] = $sum;
+                }
+                $total_fees = (float)($match['total_fees'] ?? 0);
+                $paid = (float)($match['payment_done'] ?? 0);
+                $match['pending_fees'] = max(0, $total_fees - $paid);
+            }
+        }
+
+        $page_data['q']            = $q;
+        $page_data['matches']      = $matches;
+        $page_data['classes']      = $this->db->get('class')->result_array();
+        $page_data['boards']       = $this->db->order_by('sort_order','asc')->order_by('name','asc')->get('board')->result_array();
+        $page_data['default_ay']   = $this->academic_year_for();
+        $this->load->model('crud_model');
+        $page_data['academic_years'] = $this->crud_model->academic_years(array($page_data['default_ay']));
+        $page_data['page_name']    = 'student_reregister';
+        $page_data['page_title']   = 'Re-register Student';
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /**
+     * Student Registration History — shows all previous registrations (archived students)
+     * in a read-only report format. This allows viewing past enrollment records.
+     *
+     * URLs:
+     *   admin/student_registration_history                    -> search screen
+     *   admin/student_registration_history (POST with q)      -> search results
+     */
+    function student_registration_history()
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        // Handle search - from GET or POST
+        $q = trim((string)($this->input->get('q') ?? $this->input->post('q')));
+        $matches = array();
+        if ($q !== '') {
+            $this->create_student_payment_history_table();
+            // Check if search term is numeric (student_id)
+            $is_numeric = is_numeric($q);
+            
+            $this->db->where('is_alumni = 1'); // Only PREVIOUS/archived registrations
+            $this->db->group_start();
+            if ($is_numeric) {
+                $this->db->where('student_id', (int)$q);
+                $this->db->or_where('CAST(student_id AS CHAR)', $q);
+            }
+            $this->db->like('name', $q);
+            $this->db->or_like('first_name', $q);
+            $this->db->or_like('last_name', $q);
+            $this->db->or_like('fmobile', $q);
+            $this->db->or_like('mmobile', $q);
+            $this->db->or_like('email', $q);
+            $this->db->group_end();
+            $this->db->order_by('student_id', 'desc');
+            $matches = $this->db->limit(40)->get('student')->result_array();
+            
+            // Calculate pending fees for each match
+            foreach ($matches as &$match) {
+                $match['payment_history'] = $this->db->table_exists('student_payment_history')
+                    ? $this->db->order_by('timestamp', 'asc')->get_where('student_payment_history', array('student_id' => $match['student_id']))->result_array()
+                    : array();
+                if (!empty($match['payment_history'])) {
+                    $sum = 0;
+                    foreach ($match['payment_history'] as $payment_row) {
+                        $sum += (float)($payment_row['amount'] ?? 0);
+                    }
+                    $match['payment_done'] = $sum;
+                }
+                $total_fees = (float)($match['total_fees'] ?? 0);
+                $paid = (float)($match['payment_done'] ?? 0);
+                $match['pending_fees'] = max(0, $total_fees - $paid);
+            }
+        }
+
+        $page_data['q']            = $q;
+        $page_data['matches']      = $matches;
+        $page_data['page_name']    = 'student_registration_history';
+        $page_data['page_title']   = 'Student Registration History (Read-Only)';
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /**
+    function student_payment_add($mode = '', $student_id = 0)
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $student_id = (int)$student_id;
+        $student = $student_id ? $this->db->get_where('student', array('student_id' => $student_id))->row_array() : null;
+        if (!$student) {
+            $this->session->set_flashdata('error_message', 'Student not found.');
+            redirect(base_url() . 'index.php?admin/student_information/2', 'refresh');
+        }
+
+        if ($mode === 'save' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+            $amount = (float)$this->input->post('amount');
+            if ($amount <= 0) {
+                $this->session->set_flashdata('error_message', 'Amount must be greater than zero.');
+                redirect(base_url() . 'index.php?admin/student_information/' . (int)$student['class_id'], 'refresh');
+            }
+            $payment_date = $this->input->post('payment_date');
+            $ts = $payment_date ? strtotime($payment_date) : time();
+
+            $payload = array(
+                'student_id'     => $student_id,
+                'invoice_id'     => 0,
+                'title'          => 'Payment',
+                'payment_type'   => $this->input->post('payment_type'),
+                'method'         => $this->input->post('payment_mode'),
+                'description'    => $this->input->post('description') ?: 'Payment entry',
+                'amount'         => $amount,
+                'timestamp'      => $ts ?: time(),
+                'transaction_id' => $this->input->post('transaction_id') ?: null,
+                'cheque_number'  => $this->input->post('cheque_number')  ?: null,
+                'cheque_bank'    => $this->input->post('cheque_bank')    ?: null,
+                'cheque_date'    => $this->input->post('cheque_date')    ?: null,
+            );
+
+            $this->db->insert('student_payment_history', $payload);
+            $hist_id = (int)$this->db->insert_id();
+
+            // recompute payment_done
+            $sum_row = $this->db->select_sum('amount')->where('student_id', $student_id)->get('student_payment_history')->row();
+            $paid = ($sum_row && $sum_row->amount) ? (float)$sum_row->amount : 0;
+            $this->db->where('student_id', $student_id)->update('student', array('payment_done' => $paid));
+
+            $this->session->set_flashdata('flash_message', 'Payment recorded.');
+            // Redirect into the printable A4-half receipt for this newly-created payment
+            redirect(base_url() . 'index.php?admin/payment_receipt/' . $hist_id, 'refresh');
+        }
+    }
+
+    /**
+     * Renders an A4 half-page payment receipt (two copies on one page — Student Copy + Office Copy).
+     */
+    function payment_receipt($history_id = 0)
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $history_id = (int)$history_id;
+        $payment = $this->db->get_where('student_payment_history', array('id' => $history_id))->row_array();
+        if (!$payment) {
+            show_error('Payment record not found', 404);
+            return;
+        }
+        $student = $this->db->get_where('student', array('student_id' => $payment['student_id']))->row_array();
+
+        $sum_row = $this->db->select_sum('amount')->where('student_id', $payment['student_id'])->get('student_payment_history')->row();
+        $paid    = ($sum_row && $sum_row->amount) ? (float)$sum_row->amount : 0;
+        $total   = (float)($student['total_fees'] ?? 0);
+
+        $school = array();
+        $school['name']    = ($r = $this->db->get_where('settings', array('type' => 'system_name'))->row()) ? $r->description : 'School';
+        $school['address'] = ($r = $this->db->get_where('settings', array('type' => 'address'))->row())     ? $r->description : '';
+
+        $view_data = array(
+            'payment' => $payment,
+            'student' => $student,
+            'paid'    => $paid,
+            'total'   => $total,
+            'due'     => max(0, $total - $paid),
+            'school'  => $school,
+        );
+        $this->load->view('backend/admin/payment_receipt_a4_half', $view_data);
+    }
+
+    /**
+     * Student's own mobile is only meaningful from Class 10 upwards. For lower classes
+     * we drop whatever the form posted so the column stays NULL. Returns NULL or
+     * the trimmed mobile string.
+     */
+    public function student_mobile_value_for($class_id, $posted_mobile)
+    {
+        $mobile = trim((string)$posted_mobile);
+        if ($mobile === '') return null;
+
+        $class_id = (int)$class_id;
+        if (!$class_id) return null;
+        $row = $this->db->get_where('class', array('class_id' => $class_id))->row();
+        if (!$row) return null;
+
+        // name_numeric is the canonical class number; fallback to extracting digits from name
+        $n = (int)($row->name_numeric ?? 0);
+        if (!$n && !empty($row->name) && preg_match('/(\d+)/', $row->name, $m)) {
+            $n = (int)$m[1];
+        }
+        // Decision (class 10+ keeps own mobile) lives in sms_core_helper (unit tested).
+        return sms_mobile_for_class_number($n, $mobile);
+    }
+
+    /**
+     * Indian academic year string for a given timestamp (April-March).
+     * Example: 12 May 2026 -> "2026-2027"; 5 Feb 2026 -> "2025-2026".
+     */
+    public function academic_year_for($ts = null)
+    {
+        // Implemented in sms_core_helper (unit tested).
+        return sms_academic_year($ts ?: time());
+    }
+
+    /**
+     * Returns the distinct academic years that appear on the student table,
+     * always including the current one even if no rows reference it yet.
+     */
+    public function student_academic_years()
+    {
+        $years = array($this->academic_year_for());
+        if ($this->db->table_exists('student') && $this->db->field_exists('academic_year', 'student')) {
+            $rows = $this->db->distinct()->select('academic_year')->where('academic_year IS NOT NULL', null, false)
+                          ->where('academic_year !=', '')->order_by('academic_year', 'desc')->get('student')->result_array();
+            foreach ($rows as $r) $years[] = $r['academic_year'];
+            $years = array_values(array_unique($years));
+            rsort($years);
+        }
+        return $years;
+    }
+
     private function get_class_name_for_student($class_id)
     {
         if ($class_id === '' || $class_id === null) {
@@ -351,7 +1183,7 @@ class Admin extends CI_Controller
         $seeds = array(
             'medium'       => array('English', 'Hindi'),
             'payment_type' => array('Admission', 'Installment'),
-            'payment_mode' => array('Cash', 'Online', 'Cheque'),
+            'payment_mode' => array('Cash', 'Online', 'UPI', 'Cheque'),
         );
         foreach ($seeds as $cat => $values) {
             $count = (int)$this->db->where('category', $cat)->count_all_results('lookup_value');
@@ -404,6 +1236,15 @@ class Admin extends CI_Controller
         if (!in_array('end_time', $fields)) {
             $this->db->query("ALTER TABLE `section` ADD `end_time` time NULL");
         }
+        if (!in_array('session_name', $fields)) {
+            $this->db->query("ALTER TABLE `section` ADD `session_name` varchar(20) NULL");
+        }
+        if (!in_array('revision_section', $fields)) {
+            $this->db->query("ALTER TABLE `section` ADD `revision_section` varchar(255) NULL");
+        }
+        if (!in_array('lecture_subject', $fields)) {
+            $this->db->query("ALTER TABLE `section` ADD `lecture_subject` varchar(255) NULL");
+        }
     }
 
     /**
@@ -450,9 +1291,125 @@ class Admin extends CI_Controller
                   `method` varchar(100) DEFAULT NULL,
                   `amount` decimal(10,2) DEFAULT '0.00',
                   `timestamp` int(11) DEFAULT NULL,
+                  `transaction_id` VARCHAR(64) NULL,
+                  `cheque_number` VARCHAR(64) NULL,
+                  `cheque_bank` VARCHAR(128) NULL,
+                  `cheque_date` DATE NULL,
                   PRIMARY KEY (`id`),
                   KEY `student_id` (`student_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+            ");
+        }
+    }
+
+    /**
+     * Expands the legacy `enquiry` table into the admission-enquiry model
+     * (year, enquiry no, course, source, assign/handle, status, remark, ...)
+     * and creates the enquiry activity-log table. Idempotent; runs on page load.
+     */
+    private function ensure_enquiry_columns()
+    {
+        if (!$this->db->table_exists('enquiry')) {
+            $this->db->query("
+                CREATE TABLE IF NOT EXISTS `enquiry` (
+                  `enquiry_id` int(11) NOT NULL AUTO_INCREMENT,
+                  `name` longtext NULL,
+                  `mobile` longtext NULL,
+                  `category` longtext NULL,
+                  `purpose` longtext NULL,
+                  `whom_to_meet` longtext NULL,
+                  `date` timestamp NOT NULL DEFAULT current_timestamp(),
+                  PRIMARY KEY (`enquiry_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+            ");
+        }
+
+        $cols = array(
+            'session_name'   => "varchar(20) NULL",
+            'enquiry_no'     => "varchar(50) NULL",
+            'enquiry_date'   => "date NULL",
+            'enquiry_for'    => "varchar(255) NULL",
+            'course'         => "varchar(255) NULL",
+            'source'         => "varchar(100) NULL",
+            'source_student' => "varchar(255) NULL",
+            'gender'         => "varchar(20) NULL",
+            'address'        => "longtext NULL",
+            'assign_to'      => "int(11) NULL",
+            'handled_by'     => "int(11) NULL",
+            'status'         => "varchar(30) NULL DEFAULT 'in_progress'",
+            'remark'         => "longtext NULL",
+            'created_by'     => "varchar(150) NULL",
+        );
+        foreach ($cols as $name => $def) {
+            if (!$this->db->field_exists($name, 'enquiry')) {
+                $this->db->query("ALTER TABLE `enquiry` ADD `" . $name . "` " . $def);
+            }
+        }
+
+        if (!$this->db->table_exists('enquiry_activity')) {
+            $this->db->query("
+                CREATE TABLE IF NOT EXISTS `enquiry_activity` (
+                  `activity_id` int(11) NOT NULL AUTO_INCREMENT,
+                  `enquiry_id` int(11) NOT NULL,
+                  `status` varchar(30) NULL,
+                  `note` longtext NULL,
+                  `created_by` varchar(150) NULL,
+                  `created_at` datetime NULL,
+                  PRIMARY KEY (`activity_id`),
+                  KEY `enquiry_id` (`enquiry_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+            ");
+        }
+    }
+
+    /**
+     * Creates the Course module tables: course, its subjects and its
+     * fee installments. Idempotent; runs on page load.
+     */
+    private function ensure_course_tables()
+    {
+        if (!$this->db->table_exists('course')) {
+            $this->db->query("
+                CREATE TABLE IF NOT EXISTS `course` (
+                  `course_id` int(11) NOT NULL AUTO_INCREMENT,
+                  `name` varchar(255) NOT NULL,
+                  `session_name` varchar(20) NULL,
+                  `class_id` int(11) NULL,
+                  `standard_name` varchar(50) NULL,
+                  `total_fees` decimal(10,2) NULL DEFAULT 0,
+                  `installments` int(11) NULL DEFAULT 1,
+                  `description` longtext NULL,
+                  `created_by` varchar(150) NULL,
+                  `created_at` datetime NULL,
+                  PRIMARY KEY (`course_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+            ");
+        }
+
+        if (!$this->db->table_exists('course_subject')) {
+            $this->db->query("
+                CREATE TABLE IF NOT EXISTS `course_subject` (
+                  `csubject_id` int(11) NOT NULL AUTO_INCREMENT,
+                  `course_id` int(11) NOT NULL,
+                  `subject_name` varchar(255) NOT NULL,
+                  `subject_code` varchar(50) NULL,
+                  PRIMARY KEY (`csubject_id`),
+                  KEY `course_id` (`course_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+            ");
+        }
+
+        if (!$this->db->table_exists('course_installment')) {
+            $this->db->query("
+                CREATE TABLE IF NOT EXISTS `course_installment` (
+                  `installment_id` int(11) NOT NULL AUTO_INCREMENT,
+                  `course_id` int(11) NOT NULL,
+                  `title` varchar(100) NULL,
+                  `amount` decimal(10,2) NULL DEFAULT 0,
+                  `due_date` date NULL,
+                  PRIMARY KEY (`installment_id`),
+                  KEY `course_id` (`course_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
             ");
         }
     }
@@ -465,6 +1422,40 @@ class Admin extends CI_Controller
 
         if (!$this->db->field_exists('is_alumni', 'student')) {
             $this->db->query("ALTER TABLE `student` ADD `is_alumni` tinyint(1) NOT NULL DEFAULT 0");
+        }
+        if (!$this->db->field_exists('academic_year', 'student')) {
+            $this->db->query("ALTER TABLE `student` ADD `academic_year` VARCHAR(16) NULL");
+        }
+        if (!$this->db->field_exists('previous_student_id', 'student')) {
+            $this->db->query("ALTER TABLE `student` ADD `previous_student_id` INT NULL");
+        }
+        if (!$this->db->field_exists('is_reregister', 'student')) {
+            $this->db->query("ALTER TABLE `student` ADD `is_reregister` TINYINT(1) NOT NULL DEFAULT 0");
+            // Backfill: any existing row that came through the re-register flow already
+            // has previous_student_id set — mark those as re-registered.
+            $this->db->query("UPDATE `student` SET `is_reregister` = 1 WHERE `previous_student_id` IS NOT NULL AND `previous_student_id` > 0");
+        }
+        if (!$this->db->field_exists('student_mobile', 'student')) {
+            $this->db->query("ALTER TABLE `student` ADD `student_mobile` VARCHAR(15) NULL");
+        }
+        // Form/UI already captures school name on Add Student + Bulk import, but the
+        // base schema dump never had a column for it. Add it lazily so the inserts work.
+        if (!$this->db->field_exists('school', 'student')) {
+            $this->db->query("ALTER TABLE `student` ADD `school` VARCHAR(255) NULL");
+        }
+
+        // Payment detail columns on history table (for cheque / online ref)
+        if ($this->db->table_exists('student_payment_history')) {
+            foreach (array(
+                'transaction_id'  => "VARCHAR(64) NULL",
+                'cheque_number'   => "VARCHAR(64) NULL",
+                'cheque_bank'     => "VARCHAR(128) NULL",
+                'cheque_date'     => "DATE NULL",
+            ) as $col => $def) {
+                if (!$this->db->field_exists($col, 'student_payment_history')) {
+                    $this->db->query("ALTER TABLE `student_payment_history` ADD `" . $col . "` " . $def);
+                }
+            }
         }
     }
 
@@ -553,6 +1544,7 @@ class Admin extends CI_Controller
 			'board',                            // CBSE | ICSE | State Board | ...
 			'sex',                              // male | female
 			'school_name',
+			'academic_year',                    // 2025-2026 (defaults to current Indian AY if blank)
 			'total_fees',
 			'payment_amount',                   // optional - creates a payment_history row if > 0
 			'payment_date',                     // optional - YYYY-MM-DD
@@ -585,6 +1577,7 @@ class Admin extends CI_Controller
 			'12, Sector A, Thane',
 			'English', 'CBSE', 'male',
 			'Saraswati Vidyalaya',
+			$this->academic_year_for(),
 			'25000',
 			'5000', date('Y-m-d'), 'Admission', 'Cash',
 		));
@@ -651,11 +1644,8 @@ class Admin extends CI_Controller
 				redirect(base_url() . 'index.php?admin/student_bulk_add', 'refresh');
 			}
 
-			$header_map = array();
-			foreach ($header_row as $i => $col) {
-				$normalized = trim(strtolower(preg_replace('/[^a-z0-9]+/', '_', (string)$col)));
-				if ($normalized !== '') $header_map[$normalized] = $i;
-			}
+			// Header parsing shared with enquiry import via sms_admissions_helper (unit tested).
+			$header_map = sms_build_header_map($header_row);
 
 			$form_class_id = (int)$this->input->post('class_id');
 			$class_row = $form_class_id ? $this->db->get_where('class', array('class_id' => $form_class_id))->row() : null;
@@ -671,13 +1661,7 @@ class Admin extends CI_Controller
 				if (!$row_has_value) continue;
 
 				$cell = function ($keys) use ($r, $header_map) {
-					foreach ((array)$keys as $key) {
-						$normalized = trim(strtolower(preg_replace('/[^a-z0-9]+/', '_', $key)));
-						if (isset($header_map[$normalized]) && isset($r[$header_map[$normalized]])) {
-							return trim((string)$r[$header_map[$normalized]]);
-						}
-					}
-					return '';
+					return sms_cell_value($r, $header_map, $keys);
 				};
 
 				$first_name  = $cell(array('first_name'));
@@ -685,17 +1669,18 @@ class Admin extends CI_Controller
 				$last_name   = $cell(array('last_name'));
 				$full_name   = $cell(array('name', 'full_name'));
 				if ($first_name === '' && $full_name !== '') {
-					$parts = preg_split('/\s+/', $full_name);
-					$first_name = array_shift($parts);
-					if (count($parts) === 1) $last_name = array_pop($parts);
-					elseif (count($parts) > 1) { $last_name = array_pop($parts); $middle_name = implode(' ', $parts); }
+					// Name splitting lives in sms_core_helper (unit tested).
+					$split = sms_split_full_name($full_name);
+					$first_name  = $split['first'];
+					$middle_name = $split['middle'];
+					$last_name   = $split['last'];
 				}
 
 				$data = array(
 					'first_name'        => $first_name,
 					'middle_name'       => $middle_name,
 					'last_name'         => $last_name,
-					'name'              => trim($first_name . ' ' . $middle_name . ' ' . $last_name),
+					'name'              => sms_full_name($first_name, $middle_name, $last_name),
 					'birthday'          => $cell(array('birthday', 'dob', 'date_of_birth')),
 					'sex'               => strtolower($cell(array('sex', 'gender'))),
 					'address'           => $cell(array('home_address', 'home', 'address', 'residence')),
@@ -710,6 +1695,7 @@ class Admin extends CI_Controller
 					'board'             => $cell(array('board')),
 					'total_fees'        => $cell(array('total_fees', 'fees')),
 					'is_alumni'         => 0,
+					'academic_year'     => $cell(array('academic_year', 'batch')) ?: $this->academic_year_for(),
 					'class_id'          => $form_class_id,
 					'standard'          => $class_name,
 					'is_active'         => 1,
@@ -781,11 +1767,21 @@ class Admin extends CI_Controller
 		if ($this->input->get('email')) {
 			$filters['email'] = $this->input->get('email');
 		}
-		
-		$page_data['page_name']  	= 'student_information';
-		$page_data['page_title'] 	= get_phrase('student_information');
-		$page_data['class_id'] 	= $class_id;
-		$page_data['students'] = $this->crud_model->get_students($filters);
+		if ($this->input->get('academic_year')) {
+			$filters['academic_year'] = $this->input->get('academic_year');
+		}
+
+		$page_data['page_name']      = 'student_information';
+		$page_data['page_title']     = get_phrase('student_information');
+		$page_data['class_id']       = $class_id;
+		$page_data['students']       = $this->crud_model->get_students($filters);
+		// Pull AYs from the Manage Academic Year (session) table, plus the AY currently being filtered on
+		$page_data['academic_years'] = $this->crud_model->academic_years(
+			array_filter(array(
+				$this->input->get('academic_year'),
+				$this->academic_year_for(),
+			))
+		);
 		$this->load->view('backend/index', $page_data);
 	}
 
@@ -1132,9 +2128,9 @@ class Admin extends CI_Controller
             'first_name'        => $this->input->post('first_name'),
             'middle_name'       => $this->input->post('middle_name'),
             'last_name'         => $this->input->post('last_name'),
-            'name'              => trim(
-                $this->input->post('first_name').' '.
-                $this->input->post('middle_name').' '.
+            'name'              => sms_full_name(
+                $this->input->post('first_name'),
+                $this->input->post('middle_name'),
                 $this->input->post('last_name')
             ),
             'birthday'          => $this->input->post('birthday'),
@@ -1153,6 +2149,8 @@ class Admin extends CI_Controller
             'board'             => $this->input->post('board'),
             'total_fees'        => $this->input->post('total_fees'),
             'is_alumni'         => $this->input->post('is_alumni') ? 1 : 0,
+            'academic_year'     => $this->input->post('academic_year') ?: $this->academic_year_for(),
+            'student_mobile'    => $this->student_mobile_value_for($this->input->post('class_id'), $this->input->post('student_mobile')),
             'password'          => password_hash('password', PASSWORD_BCRYPT)
         ];
 
@@ -1161,20 +2159,22 @@ class Admin extends CI_Controller
 
         // ================= INSERT PAYMENTS (HISTORY) =================
         $payments = $this->extractPaymentsFromPost();
-        $total_payment = 0;
+        $total_payment = sms_payments_total($payments); // unit tested
 
         foreach ($payments as $p) {
-            $total_payment += $p['amount'];
-
             $this->db->insert('student_payment_history', [
-                'student_id'   => $student_id,
-                'invoice_id'   => 0,
-                'title'        => 'Payment',
-                'payment_type' => $p['type'],
-                'method'       => $p['mode'],
-                'description'  => 'Payment entry',
-                'amount'       => $p['amount'],
-                'timestamp'    => $p['date'] ? strtotime($p['date']) : time()
+                'student_id'     => $student_id,
+                'invoice_id'     => 0,
+                'title'          => 'Payment',
+                'payment_type'   => $p['type'],
+                'method'         => $p['mode'],
+                'description'    => 'Payment entry',
+                'amount'         => $p['amount'],
+                'timestamp'      => $p['date'] ? strtotime($p['date']) : time(),
+                'transaction_id' => isset($p['transaction_id']) ? $p['transaction_id'] : null,
+                'cheque_number'  => isset($p['cheque_number'])  ? $p['cheque_number']  : null,
+                'cheque_bank'    => isset($p['cheque_bank'])    ? $p['cheque_bank']    : null,
+                'cheque_date'    => isset($p['cheque_date']) && $p['cheque_date'] ? $p['cheque_date'] : null,
             ]);
         }
 
@@ -1208,11 +2208,12 @@ class Admin extends CI_Controller
                 $school_row = $this->db->get_where('settings', array('type' => 'system_name'))->row();
                 $school_name = $school_row ? $school_row->description : '';
 
-                $whatsapp_message = strtr($template, array(
-                    '{{studentname}}' => $data['name'],
-                    '{{studentid}}'   => $student_id,
-                    '{{schoolname}}'  => $school_name,
-                    '{{class}}'       => $data['standard'],
+                // Placeholder rendering lives in sms_core_helper (unit tested).
+                $whatsapp_message = sms_render_template($template, array(
+                    'studentname' => $data['name'],
+                    'studentid'   => $student_id,
+                    'schoolname'  => $school_name,
+                    'class'       => $data['standard'],
                 ));
 
                 $wa_response = $this->sms_model->send_whatsapp($whatsapp_message, $data['fmobile']);
@@ -1268,9 +2269,9 @@ class Admin extends CI_Controller
             'first_name'        => $this->input->post('first_name'),
             'middle_name'       => $this->input->post('middle_name'),
             'last_name'         => $this->input->post('last_name'),
-            'name'              => trim(
-                $this->input->post('first_name').' '.
-                $this->input->post('middle_name').' '.
+            'name'              => sms_full_name(
+                $this->input->post('first_name'),
+                $this->input->post('middle_name'),
                 $this->input->post('last_name')
             ),
             'birthday'          => $this->input->post('birthday'),
@@ -1287,7 +2288,10 @@ class Admin extends CI_Controller
             'standard'          => $this->get_class_name_for_student($this->input->post('class_id')),
             'medium'            => $this->input->post('medium'),
             'board'             => $this->input->post('board'),
-            'is_alumni'         => $this->input->post('is_alumni') ? 1 : 0
+            'is_alumni'         => $this->input->post('is_alumni') ? 1 : 0,
+            'is_reregister'     => $this->input->post('is_reregister') ? 1 : 0,
+            'academic_year'     => $this->input->post('academic_year') ?: null,
+            'student_mobile'    => $this->student_mobile_value_for($this->input->post('class_id'), $this->input->post('student_mobile')),
         ];
 
         $this->db->where('student_id', $param3)->update('student', $data);
@@ -1454,11 +2458,15 @@ class Admin extends CI_Controller
 
             if ($amount > 0) {
                 $payments[] = [
-                    'index' => $i,
-                    'amount' => $amount,
-                    'date' => $this->input->post('payment'.$i.'_date'),
-                    'type' => $this->input->post('payment'.$i.'_type'),
-                    'mode' => $this->input->post('payment'.$i.'_mode')
+                    'index'          => $i,
+                    'amount'         => $amount,
+                    'date'           => $this->input->post('payment'.$i.'_date'),
+                    'type'           => $this->input->post('payment'.$i.'_type'),
+                    'mode'           => $this->input->post('payment'.$i.'_mode'),
+                    'transaction_id' => $this->input->post('payment'.$i.'_transaction_id'),
+                    'cheque_number'  => $this->input->post('payment'.$i.'_cheque_number'),
+                    'cheque_bank'    => $this->input->post('payment'.$i.'_cheque_bank'),
+                    'cheque_date'    => $this->input->post('payment'.$i.'_cheque_date'),
                 ];
             }
         }
@@ -1673,12 +2681,15 @@ public function handleStudentFiles($student_id)
             return;
         }
 
-        // school header for slip
+        // school header for slip — same fields the student invoice receipt uses
         $school = array();
         $name_row    = $this->db->get_where('settings', array('type' => 'system_name'))->row();
         $school['name']    = $name_row ? $name_row->description : 'School';
         $address_row = $this->db->get_where('settings', array('type' => 'address'))->row();
         $school['address'] = $address_row ? $address_row->description : '';
+        $school['phone']   = '9987676008';
+        $school['email']   = 'shreecochingclasses@gmail.com';
+        $school['website'] = 'shreecochingclasses.com';
 
         if ($mode == 'generate' && $this->input->post('month')) {
             $month_str   = $this->input->post('month'); // YYYY-MM
@@ -1783,7 +2794,7 @@ public function handleStudentFiles($student_id)
 
         $synthetic_invoice = array(
             'invoice_id'  => $student_id,
-            'title'       => 'School Fees',
+            'title'       => 'Tuition Fees',
             'description' => trim(($student['standard'] ?? '') . ' ' . ($student['medium'] ?? '') . ' ' . ($student['board'] ?? '')),
             'amount'      => $total_fees,
         );
@@ -2382,7 +3393,7 @@ public function handleStudentFiles($student_id)
         }
         $page_data['sessions']    = $this->db->get('session')->result_array();
         $page_data['page_name']  = 'session';
-        $page_data['page_title'] = get_phrase('manage_session');
+        $page_data['page_title'] = 'Manage Academic Year';
         $this->load->view('backend/index', $page_data);
     }
 	
@@ -2703,57 +3714,427 @@ public function handleStudentFiles($student_id)
 	
 	
 	
-		 /****MANAGE AAL ENQUIRY SETTINGS*****/
+		 /****MANAGE ALL ADMISSION ENQUIRIES*****/
     function enquiry($param1 = '', $param2 = '')
     {
         if ($this->session->userdata('admin_login') != 1)
             redirect(base_url(), 'refresh');
+
+        $this->ensure_enquiry_columns();
+
+        // Person who is logged in — used to stamp created_by / activities.
+        $created_by = $this->session->userdata('name');
+        if (empty($created_by)) $created_by = 'Admin';
+
         if ($param1 == 'create') {
-            $data['category']       = $this->input->post('category');
-            $data['mobile']		  	= $this->input->post('mobile');
-            $data['purpose']		= $this->input->post('purpose');
-            $data['name']		  	= $this->input->post('name');
-            $data['whom']   		= $this->input->post('whom');
+            $data['session_name']   = $this->input->post('session_name');
+            $data['enquiry_no']     = $this->input->post('enquiry_no');
+            $data['enquiry_date']   = $this->input->post('enquiry_date');
+            $data['enquiry_for']    = $this->input->post('enquiry_for');
+            $data['name']           = $this->input->post('name');
+            $data['course']         = $this->input->post('course');
+            $data['source']         = $this->input->post('source');
+            $data['source_student'] = $this->input->post('source_student');
+            $data['gender']         = $this->input->post('gender');
+            $data['address']        = $this->input->post('address');
+            $data['mobile']         = $this->input->post('mobile');
+            $data['assign_to']      = $this->input->post('assign_to') ?: null;
+            $data['handled_by']     = $this->input->post('handled_by') ?: null;
+            $data['status']         = 'in_progress';
+            $data['created_by']     = $created_by;
             $this->db->insert('enquiry', $data);
-            $this->session->set_flashdata('flash_message' , get_phrase('data_added_successfully'));
+            $enquiry_id = $this->db->insert_id();
+
+            $this->db->insert('enquiry_activity', array(
+                'enquiry_id' => $enquiry_id,
+                'status'     => 'in_progress',
+                'note'       => 'Enquiry created',
+                'created_by' => $created_by,
+                'created_at' => date('Y-m-d H:i:s'),
+            ));
+
+            $this->session->set_flashdata('flash_message', get_phrase('data_added_successfully'));
             redirect(base_url() . 'index.php?admin/enquiry/', 'refresh');
         }
-		
-		if ($param1 == 'do_update') {
-          	$data['category']       = $this->input->post('category');
-            $data['mobile']		  	= $this->input->post('mobile');
-            $data['purpose']		= $this->input->post('purpose');
-            $data['name']		  	= $this->input->post('name');
-            $data['whom']   		= $this->input->post('whom');
-            
+
+        if ($param1 == 'do_update') {
+            $data['session_name']   = $this->input->post('session_name');
+            $data['enquiry_no']     = $this->input->post('enquiry_no');
+            $data['enquiry_date']   = $this->input->post('enquiry_date');
+            $data['enquiry_for']    = $this->input->post('enquiry_for');
+            $data['name']           = $this->input->post('name');
+            $data['course']         = $this->input->post('course');
+            $data['source']         = $this->input->post('source');
+            $data['source_student'] = $this->input->post('source_student');
+            $data['gender']         = $this->input->post('gender');
+            $data['address']        = $this->input->post('address');
+            $data['mobile']         = $this->input->post('mobile');
+            $data['assign_to']      = $this->input->post('assign_to') ?: null;
+            $data['handled_by']     = $this->input->post('handled_by') ?: null;
+
             $this->db->where('enquiry_id', $param2);
             $this->db->update('enquiry', $data);
-            $this->session->set_flashdata('flash_message' , get_phrase('data_updated'));
+            $this->session->set_flashdata('flash_message', get_phrase('data_updated'));
             redirect(base_url() . 'index.php?admin/enquiry/', 'refresh');
-        } else if ($param1 == 'edit') {
-            $page_data['edit_data'] = $this->db->get_where('enquiry', array(
-                'enquiry_id' => $param2
-            ))->result_array();
         }
-		
+
+        // Save follow-up status + remark and log it as an activity.
+        if ($param1 == 'save_status') {
+            $status = $this->input->post('status');
+            $remark = $this->input->post('remark');
+            $this->db->where('enquiry_id', $param2);
+            $this->db->update('enquiry', array(
+                'status'     => $status,
+                'remark'     => $remark,
+                'assign_to'  => $this->input->post('assign_to') ?: null,
+                'handled_by' => $this->input->post('handled_by') ?: null,
+            ));
+            $this->db->insert('enquiry_activity', array(
+                'enquiry_id' => $param2,
+                'status'     => $status,
+                'note'       => $remark ?: ('Status changed to ' . $status),
+                'created_by' => $created_by,
+                'created_at' => date('Y-m-d H:i:s'),
+            ));
+            $this->session->set_flashdata('flash_message', get_phrase('data_updated'));
+            redirect(base_url() . 'index.php?admin/enquiry_follow/' . $param2, 'refresh');
+        }
+
+        // Add a follow-up activity note without changing the status.
+        if ($param1 == 'add_activity') {
+            $this->db->insert('enquiry_activity', array(
+                'enquiry_id' => $param2,
+                'status'     => $this->input->post('status'),
+                'note'       => $this->input->post('note'),
+                'created_by' => $created_by,
+                'created_at' => date('Y-m-d H:i:s'),
+            ));
+            $this->session->set_flashdata('flash_message', get_phrase('data_added_successfully'));
+            redirect(base_url() . 'index.php?admin/enquiry_follow/' . $param2, 'refresh');
+        }
+
+        // Nominate / convert a joined enquiry into a student admission.
+        if ($param1 == 'nominate') {
+            $this->db->where('enquiry_id', $param2);
+            $this->db->update('enquiry', array('status' => 'joined'));
+            $this->db->insert('enquiry_activity', array(
+                'enquiry_id' => $param2,
+                'status'     => 'joined',
+                'note'       => 'Nominated for admission',
+                'created_by' => $created_by,
+                'created_at' => date('Y-m-d H:i:s'),
+            ));
+            redirect(base_url() . 'index.php?admin/student_add', 'refresh');
+        }
+
         if ($param1 == 'delete') {
             $this->db->where('enquiry_id', $param2);
             $this->db->delete('enquiry');
-            $this->session->set_flashdata('flash_message' , get_phrase('data_deleted'));
+            $this->db->where('enquiry_id', $param2);
+            $this->db->delete('enquiry_activity');
+            $this->session->set_flashdata('flash_message', get_phrase('data_deleted'));
             redirect(base_url() . 'index.php?admin/enquiry/', 'refresh');
         }
-        $page_data['enquiry_setting']    = $this->db->get('enquiry')->result_array();
+
+        $this->db->order_by('enquiry_id', 'desc');
+        $page_data['enquiries']  = $this->db->get('enquiry')->result_array();
         $page_data['page_name']  = 'enquiry';
         $page_data['page_title'] = get_phrase('manage_enquiries');
         $this->load->view('backend/index', $page_data);
     }
-	
+
+    /****ADD / EDIT AN ENQUIRY (full-page form)*****/
+    function enquiry_add($param1 = '', $param2 = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_enquiry_columns();
+
+        if ($param1 == 'edit') {
+            $page_data['edit_data'] = $this->db->get_where('enquiry', array('enquiry_id' => $param2))->row_array();
+        }
+
+        // Suggest the next enquiry number (ENQ-0001 style).
+        $last = $this->db->select('enquiry_id')->order_by('enquiry_id', 'desc')->limit(1)->get('enquiry')->row();
+        $page_data['next_no']    = sms_next_enquiry_no($last ? $last->enquiry_id : 0);
+        $page_data['sessions']   = $this->db->get('session')->result_array();
+        $page_data['courses']    = $this->db->table_exists('course') ? $this->db->get('course')->result_array() : array();
+        $page_data['staff']      = $this->db->get('teacher')->result_array();
+        $page_data['page_name']  = 'enquiry_add';
+        $page_data['page_title'] = get_phrase('add_enquiry');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /****ENQUIRY FOLLOW-UP / STATUS TRACKING + ACTIVITY LOG*****/
+    function enquiry_follow($enquiry_id = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_enquiry_columns();
+
+        $page_data['enquiry'] = $this->db->get_where('enquiry', array('enquiry_id' => $enquiry_id))->row_array();
+        if (empty($page_data['enquiry'])) {
+            redirect(base_url() . 'index.php?admin/enquiry/', 'refresh');
+        }
+        $this->db->order_by('activity_id', 'desc');
+        $page_data['activities'] = $this->db->get_where('enquiry_activity', array('enquiry_id' => $enquiry_id))->result_array();
+        $page_data['staff']      = $this->db->get('teacher')->result_array();
+        $page_data['page_name']  = 'enquiry_follow';
+        $page_data['page_title'] = get_phrase('enquiry_follow_up');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /****BULK ENQUIRY IMPORT (xls/csv)*****/
+    function enquiry_bulk_add($param1 = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_enquiry_columns();
+
+        if ($param1 == 'template') {
+            header('Content-Type: text/csv');
+            header('Content-Disposition: attachment; filename="enquiry_bulk_template.csv"');
+            $out = fopen('php://output', 'w');
+            fputcsv($out, array('enquiry_no', 'enquiry_date', 'enquiry_for', 'name', 'course', 'source', 'gender', 'mobile', 'address'));
+            fputcsv($out, array('ENQ-0001', date('Y-m-d'), 'Class 5', 'John Doe', 'Regular', 'Google search', 'Male', '9876543210', 'Sample address'));
+            fclose($out);
+            return;
+        }
+
+        if ($param1 == 'import_excel') {
+            if (empty($_FILES['userfile']['tmp_name'])) {
+                $this->session->set_flashdata('error', 'Please choose a file.');
+                redirect(base_url() . 'index.php?admin/enquiry_bulk_add', 'refresh');
+            }
+
+            $orig_name = strtolower($_FILES['userfile']['name']);
+            $is_csv    = (substr($orig_name, -4) === '.csv') ||
+                         (isset($_FILES['userfile']['type']) && stripos($_FILES['userfile']['type'], 'csv') !== false);
+            $ext    = $is_csv ? 'csv' : 'xlsx';
+            $target = 'uploads/enquiry_import.' . $ext;
+            move_uploaded_file($_FILES['userfile']['tmp_name'], $target);
+
+            $rows = array();
+            if ($is_csv) {
+                if (($h = fopen($target, 'r')) !== false) {
+                    while (($line = fgetcsv($h)) !== false) $rows[] = $line;
+                    fclose($h);
+                }
+            } else {
+                include_once 'simplexlsx.class.php';
+                $xlsx = new SimpleXLSX($target);
+                $rows = $xlsx->rows();
+            }
+
+            if (empty($rows)) {
+                $this->session->set_flashdata('error', 'No rows found in the uploaded file.');
+                redirect(base_url() . 'index.php?admin/enquiry_bulk_add', 'refresh');
+            }
+
+            // First non-empty row is the header.
+            $header_row = null; $first_data_index = 0;
+            foreach ($rows as $idx => $r) {
+                foreach ($r as $cell) { if (trim((string)$cell) !== '') { $header_row = $r; $first_data_index = $idx + 1; break 2; } }
+            }
+            if (!$header_row) {
+                $this->session->set_flashdata('error', 'Could not find a header row.');
+                redirect(base_url() . 'index.php?admin/enquiry_bulk_add', 'refresh');
+            }
+
+            $header_map = sms_build_header_map($header_row);
+
+            $created_by = $this->session->userdata('name') ?: 'Admin';
+            $session_name = $this->input->post('session_name');
+            $imported = 0;
+
+            for ($idx = $first_data_index; $idx < count($rows); $idx++) {
+                $r = $rows[$idx];
+                $row_has_value = false;
+                foreach ($r as $cell) { if (trim((string)$cell) !== '') { $row_has_value = true; break; } }
+                if (!$row_has_value) continue;
+
+                $cell = function ($keys) use ($r, $header_map) {
+                    return sms_cell_value($r, $header_map, $keys);
+                };
+
+                $this->db->insert('enquiry', array(
+                    'session_name' => $session_name,
+                    'enquiry_no'   => $cell('enquiry_no'),
+                    'enquiry_date' => $cell('enquiry_date') ?: date('Y-m-d'),
+                    'enquiry_for'  => $cell('enquiry_for'),
+                    'name'         => $cell('name'),
+                    'course'       => $cell('course'),
+                    'source'       => $cell('source'),
+                    'gender'       => $cell('gender'),
+                    'mobile'       => $cell(array('mobile', 'contact', 'contact_no', 'phone')),
+                    'address'      => $cell('address'),
+                    'status'       => 'in_progress',
+                    'created_by'   => $created_by,
+                ));
+                $imported++;
+            }
+
+            $this->session->set_flashdata('flash_message', $imported . ' enquiries imported successfully.');
+            redirect(base_url() . 'index.php?admin/enquiry/', 'refresh');
+        }
+
+        $page_data['sessions']   = $this->db->get('session')->result_array();
+        $page_data['page_name']  = 'enquiry_bulk_add';
+        $page_data['page_title'] = get_phrase('bulk_enquiry_import');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /****MANAGE COURSES*****/
+    function course($param1 = '', $param2 = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_course_tables();
+        $created_by = $this->session->userdata('name') ?: 'Admin';
+
+        if ($param1 == 'create' || $param1 == 'do_update') {
+            $class_id   = $this->input->post('class_id') ?: null;
+            $class_name = '';
+            if ($class_id) {
+                $class_row  = $this->db->get_where('class', array('class_id' => $class_id))->row();
+                $class_name = $class_row ? $class_row->name : '';
+            }
+            $data = array(
+                'name'          => $this->input->post('name'),
+                'session_name'  => $this->input->post('session_name'),
+                'class_id'      => $class_id,
+                'standard_name' => $this->input->post('standard_name') ?: $class_name,
+                'total_fees'    => $this->input->post('total_fees') ?: 0,
+                'installments'  => $this->input->post('installments') ?: 1,
+                'description'   => $this->input->post('description'),
+            );
+
+            if ($param1 == 'create') {
+                $data['created_by'] = $created_by;
+                $data['created_at'] = date('Y-m-d H:i:s');
+                $this->db->insert('course', $data);
+                $course_id = $this->db->insert_id();
+                $this->generate_course_installments($course_id, $data['total_fees'], $data['installments']);
+                $this->session->set_flashdata('flash_message', get_phrase('data_added_successfully'));
+                redirect(base_url() . 'index.php?admin/course_view/' . $course_id, 'refresh');
+            } else {
+                $this->db->where('course_id', $param2);
+                $this->db->update('course', $data);
+                // Rebuild installments to match the new fee/installment count.
+                $this->db->where('course_id', $param2)->delete('course_installment');
+                $this->generate_course_installments($param2, $data['total_fees'], $data['installments']);
+                $this->session->set_flashdata('flash_message', get_phrase('data_updated'));
+                redirect(base_url() . 'index.php?admin/course_view/' . $param2, 'refresh');
+            }
+        }
+
+        if ($param1 == 'delete') {
+            $this->db->where('course_id', $param2)->delete('course');
+            $this->db->where('course_id', $param2)->delete('course_subject');
+            $this->db->where('course_id', $param2)->delete('course_installment');
+            $this->session->set_flashdata('flash_message', get_phrase('data_deleted'));
+            redirect(base_url() . 'index.php?admin/course/', 'refresh');
+        }
+
+        $this->db->order_by('course_id', 'desc');
+        $page_data['courses']    = $this->db->get('course')->result_array();
+        $page_data['page_name']  = 'course';
+        $page_data['page_title'] = get_phrase('manage_courses');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /**
+     * Splits a course's total fee into N equal monthly installments.
+     */
+    private function generate_course_installments($course_id, $total_fees, $count)
+    {
+        $amounts = sms_split_installments($total_fees, $count);
+        foreach ($amounts as $idx => $amount) {
+            $this->db->insert('course_installment', array(
+                'course_id' => $course_id,
+                'title'     => 'Installment ' . ($idx + 1),
+                'amount'    => $amount,
+                'due_date'  => null,
+            ));
+        }
+    }
+
+    /****ADD / EDIT COURSE (full-page form)*****/
+    function course_add($param1 = '', $param2 = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_course_tables();
+
+        if ($param1 == 'edit') {
+            $page_data['edit_data'] = $this->db->get_where('course', array('course_id' => $param2))->row_array();
+        }
+        $page_data['sessions']   = $this->db->get('session')->result_array();
+        $page_data['classes']    = $this->db->get('class')->result_array();
+        $page_data['page_name']  = 'course_add';
+        $page_data['page_title'] = get_phrase('add_course');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /****VIEW COURSE: fees, installments, subjects*****/
+    function course_view($course_id = '', $param1 = '', $param2 = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url(), 'refresh');
+
+        $this->ensure_course_tables();
+
+        if ($param1 == 'add_subject') {
+            $this->db->insert('course_subject', array(
+                'course_id'    => $course_id,
+                'subject_name' => $this->input->post('subject_name'),
+                'subject_code' => $this->input->post('subject_code'),
+            ));
+            $this->session->set_flashdata('flash_message', get_phrase('data_added_successfully'));
+            redirect(base_url() . 'index.php?admin/course_view/' . $course_id, 'refresh');
+        }
+
+        if ($param1 == 'delete_subject') {
+            $this->db->where('csubject_id', $param2)->delete('course_subject');
+            $this->session->set_flashdata('flash_message', get_phrase('data_deleted'));
+            redirect(base_url() . 'index.php?admin/course_view/' . $course_id, 'refresh');
+        }
+
+        if ($param1 == 'save_installment') {
+            $this->db->where('installment_id', $param2)->update('course_installment', array(
+                'title'    => $this->input->post('title'),
+                'amount'   => $this->input->post('amount') ?: 0,
+                'due_date' => $this->input->post('due_date') ?: null,
+            ));
+            $this->session->set_flashdata('flash_message', get_phrase('data_updated'));
+            redirect(base_url() . 'index.php?admin/course_view/' . $course_id, 'refresh');
+        }
+
+        $page_data['course'] = $this->db->get_where('course', array('course_id' => $course_id))->row_array();
+        if (empty($page_data['course'])) {
+            redirect(base_url() . 'index.php?admin/course/', 'refresh');
+        }
+        $page_data['subjects']     = $this->db->get_where('course_subject', array('course_id' => $course_id))->result_array();
+        $this->db->order_by('installment_id', 'asc');
+        $page_data['installments'] = $this->db->get_where('course_installment', array('course_id' => $course_id))->result_array();
+        $page_data['page_name']  = 'course_view';
+        $page_data['page_title'] = get_phrase('course_details');
+        $this->load->view('backend/index', $page_data);
+    }
+
 
     /****MANAGE SECTIONS*****/
     function section($class_id = '')
     {
         if ($this->session->userdata('admin_login') != 1)
             redirect(base_url(), 'refresh');
+
+        $this->ensure_teacher_timetable_columns();
 
         $page_data['page_name']  = 'section';
         $page_data['page_title'] = 'Manage Teachers Time Table';
@@ -2765,6 +4146,8 @@ public function handleStudentFiles($student_id)
     {
         if ($this->session->userdata('admin_login') != 1)
             redirect(base_url(), 'refresh');
+
+        $this->ensure_teacher_timetable_columns();
 
         $days = $this->input->post('days');
         if (!is_array($days)) {
@@ -2778,7 +4161,10 @@ public function handleStudentFiles($student_id)
             'teacher_id' => $this->input->post('teacher_id'),
             'days'       => implode(',', $days),
             'start_time' => $this->input->post('start_time'),
-            'end_time'   => $this->input->post('end_time')
+            'end_time'   => $this->input->post('end_time'),
+            'session_name'     => $this->input->post('session_name'),
+            'revision_section' => $this->input->post('revision_section'),
+            'lecture_subject'  => $this->input->post('lecture_subject')
         );
 
         if ($param1 == 'create' || $param1 == 'edit') {

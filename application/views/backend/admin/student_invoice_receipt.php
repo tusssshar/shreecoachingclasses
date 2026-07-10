@@ -29,12 +29,13 @@ $today = date('d M Y');
     <meta charset="utf-8">
     <title>Receipt <?php echo htmlspecialchars($receipt_no); ?> &mdash; <?php echo htmlspecialchars($student['name']); ?></title>
     <style>
+        @page { size: A4 portrait; margin: 8mm; }
         * { box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
             background: #eef0f4;
             margin: 0;
-            padding: 30px 10px;
+            padding: 6px 8px;
             color: #222;
         }
         .receipt {
@@ -42,15 +43,16 @@ $today = date('d M Y');
             margin: 0 auto;
             background: #fff;
             border: 1px solid #d0d4dc;
-            border-radius: 8px;
-            box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             overflow: hidden;
         }
         .receipt-header {
             background: linear-gradient(135deg, #1f3a68 0%, #2c5298 100%);
             color: #fff;
-            padding: 22px 28px 18px;
+            padding: 10px 14px 8px;
             position: relative;
+            text-align: center;
         }
         .receipt-header h1 {
             margin: 0;
@@ -58,126 +60,124 @@ $today = date('d M Y');
             font-weight: 800;
             letter-spacing: 1px;
             color: #fff !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+        }
+        .receipt-header .receipt-subtag {
+            display: inline-block;
+            margin-top: 3px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 2.5px;
+            color: #f5b921;
+            text-transform: uppercase;
         }
         .receipt-header .school-meta {
             font-size: 12px;
-            opacity: 0.95;
-            margin-top: 4px;
-            line-height: 1.5;
-        }
-        .receipt-header .receipt-tag {
-            position: absolute;
-            top: 22px;
-            right: 28px;
-            background: #f5b921;
-            color: #1f3a68;
-            font-weight: 800;
-            font-size: 12px;
-            padding: 5px 12px;
-            border-radius: 14px;
-            letter-spacing: 0.6px;
+            font-weight: 600;
+            opacity: 0.98;
+            margin-top: 3px;
+            line-height: 1.45;
+            color: #fff;
         }
         .receipt-header::after {
             content: "";
             display: block;
-            height: 4px;
+            height: 3px;
             background: #f5b921;
-            margin: 16px -28px -18px;
+            margin: 8px -14px -8px;
         }
 
-        .badge-paid {
+        .badge-paid, .badge-due {
             display: inline-block;
-            background: #27ae60;
             color: #fff;
-            padding: 6px 14px;
-            border-radius: 4px;
+            padding: 3px 10px;
+            border-radius: 3px;
             font-weight: 700;
-            font-size: 13px;
-            letter-spacing: 1px;
+            font-size: 12px;
+            letter-spacing: 0.8px;
         }
-        .badge-due {
-            display: inline-block;
-            background: #c0392b;
-            color: #fff;
-            padding: 6px 14px;
-            border-radius: 4px;
-            font-weight: 700;
-            font-size: 13px;
-            letter-spacing: 1px;
-        }
+        .badge-paid { background: #27ae60; }
+        .badge-due  { background: #c0392b; }
 
-        .body { padding: 22px 28px; }
+        .body { padding: 8px 14px; }
         .meta-grid {
             display: flex;
             flex-wrap: wrap;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 18px;
+            gap: 6px 18px;
+            margin: 8px 0 6px;
+            padding: 8px 10px;
+            background: #f5f7fb;
+            border: 1px solid #d6dde9;
+            border-left: 4px solid #f5b921;
+            border-radius: 4px;
         }
         .meta-block {
-            min-width: 220px;
-            font-size: 13px;
-            line-height: 1.65;
+            flex: 1 1 0;
+            min-width: 240px;
+            font-size: 12px;
+            line-height: 1.55;
+            text-align: left;
         }
+        .meta-block > div { margin: 0; }
         .meta-block .label {
-            font-weight: 600;
+            font-weight: 700;
             color: #1f3a68;
             display: inline-block;
             min-width: 95px;
         }
-        .meta-block strong { color: #222; }
+        .meta-block strong { color: #111; font-weight: 700; }
+        .meta-block .sep { color: #9ca3af; margin: 0 6px; font-weight: 400; }
 
         h3.section-title {
-            font-size: 14px;
+            font-size: 13px;
             color: #1f3a68;
             border-bottom: 2px solid #f5b921;
-            padding-bottom: 4px;
-            margin: 22px 0 12px;
+            padding-bottom: 2px;
+            margin: 6px 0 4px;
             text-transform: uppercase;
-            letter-spacing: 0.6px;
+            letter-spacing: 0.5px;
         }
 
         table.payments {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: 11px;
         }
         table.payments th {
             background: #1f3a68;
             color: #fff;
             text-align: left;
-            padding: 8px 10px;
+            padding: 3px 6px;
             font-weight: 600;
         }
         table.payments td {
             border-bottom: 1px solid #e3e6ec;
-            padding: 8px 10px;
+            padding: 3px 6px;
         }
         table.payments tr:nth-child(even) td { background: #f8f9fb; }
         table.payments td.amount { text-align: right; font-weight: 600; color: #1f3a68; }
 
         .totals {
-            margin-top: 16px;
+            margin-top: 4px;
             border-top: 2px solid #1f3a68;
-            padding-top: 14px;
+            padding-top: 4px;
             display: flex;
             justify-content: flex-end;
         }
         .totals .totals-table {
-            min-width: 320px;
-            font-size: 14px;
+            min-width: 300px;
+            font-size: 11.5px;
         }
         .totals .totals-table .row {
             display: flex;
             justify-content: space-between;
-            padding: 4px 0;
+            padding: 2px 0;
         }
         .totals .totals-table .row.grand {
             border-top: 1px dashed #c0c0c0;
-            margin-top: 6px;
-            padding-top: 8px;
-            font-size: 16px;
+            margin-top: 4px;
+            padding-top: 5px;
+            font-size: 13px;
             font-weight: 700;
             color: #1f3a68;
         }
@@ -185,11 +185,11 @@ $today = date('d M Y');
         .totals .totals-table .row .v { font-weight: 600; }
 
         .footer-block {
-            margin-top: 32px;
+            margin-top: 8px;
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            font-size: 12px;
+            font-size: 11.5px;
             color: #555;
         }
         .footer-block .signature {
@@ -198,8 +198,8 @@ $today = date('d M Y');
         }
         .footer-block .signature .line {
             border-top: 1px solid #333;
-            margin-top: 36px;
-            padding-top: 4px;
+            margin-top: 14px;
+            padding-top: 2px;
         }
         .footer-block .thanks {
             font-style: italic;
@@ -207,26 +207,27 @@ $today = date('d M Y');
         }
 
         .notice {
-            font-size: 11px;
+            font-size: 10.5px;
             color: #777;
-            margin-top: 22px;
+            margin-top: 5px;
             border-top: 1px dashed #ccc;
-            padding-top: 8px;
-            line-height: 1.5;
+            padding-top: 4px;
+            line-height: 1.4;
         }
 
         .toolbar {
             max-width: 760px;
-            margin: 0 auto 14px;
+            margin: 0 auto 8px;
             text-align: right;
         }
         .toolbar button {
             background: #1f3a68;
             color: #fff;
             border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
+            padding: 6px 14px;
+            border-radius: 3px;
             font-weight: 600;
+            font-size: 12.5px;
             cursor: pointer;
             margin-left: 6px;
         }
@@ -234,7 +235,7 @@ $today = date('d M Y');
         @media print {
             body { background: #fff; padding: 0; }
             .toolbar { display: none; }
-            .receipt { box-shadow: none; border: 1px solid #1f3a68; }
+            .receipt { box-shadow: none; border: 1px solid #1f3a68; max-width: none; border-radius: 0; }
         }
     </style>
 </head>
@@ -247,8 +248,8 @@ $today = date('d M Y');
 
 <div class="receipt">
     <div class="receipt-header">
-        <span class="receipt-tag">RECEIPT</span>
         <h1><?php echo strtoupper(htmlspecialchars($school['name'])); ?></h1>
+        <div class="receipt-subtag">RECEIPT</div>
         <div class="school-meta">
             <?php echo htmlspecialchars($school['address']); ?><br>
             Phone: <?php echo htmlspecialchars($school['phone']); ?>
@@ -261,6 +262,16 @@ $today = date('d M Y');
 
         <div class="meta-grid">
             <div class="meta-block">
+                <div><span class="label">Name</span> <strong><?php echo htmlspecialchars($student['name']); ?></strong></div>
+                <div>
+                    <span class="label">Student ID</span> <strong>STU-<?php echo str_pad($student['student_id'], 5, '0', STR_PAD_LEFT); ?></strong>
+                    <span class="sep">|</span>
+                    <span class="label" style="min-width:50px;">Class</span> <strong><?php echo htmlspecialchars($student['standard'] ?: ($student['class_id'] ?: '-')); ?></strong>
+                </div>
+                <div><span class="label">Father</span> <strong><?php echo htmlspecialchars($student['father_name'] ?: '-'); ?></strong></div>
+            </div>
+
+            <div class="meta-block">
                 <div><span class="label">Receipt No.</span> <strong><?php echo htmlspecialchars($receipt_no); ?></strong></div>
                 <div><span class="label">Issued On</span> <strong><?php echo $today; ?></strong></div>
                 <div><span class="label">Status</span>
@@ -270,13 +281,6 @@ $today = date('d M Y');
                         <span class="badge-due">PENDING &nbsp;&#8377;<?php echo number_format($due, 2); ?></span>
                     <?php endif; ?>
                 </div>
-            </div>
-
-            <div class="meta-block" style="text-align:right;">
-                <div><span class="label">Student</span> <strong><?php echo htmlspecialchars($student['name']); ?></strong></div>
-                <div><span class="label">Student ID</span> <strong>STU-<?php echo str_pad($student['student_id'], 5, '0', STR_PAD_LEFT); ?></strong></div>
-                <div><span class="label">Class</span> <strong><?php echo htmlspecialchars($student['standard'] ?: ($student['class_id'] ?: '-')); ?></strong></div>
-                <div><span class="label">Father</span> <strong><?php echo htmlspecialchars($student['father_name'] ?: '-'); ?></strong></div>
             </div>
         </div>
 

@@ -42,7 +42,7 @@
         <li class="<?php if ($page_name == 'session') echo 'active'; ?> ">
             <a href="<?php echo base_url(); ?>index.php?admin/session">
                 <i class="fa fa-gear"></i>
-                <span><?php echo get_phrase('manage_session'); ?></span>
+                <span>Manage Academic Year</span>
             </a>
         </li>
 
@@ -51,7 +51,7 @@
         if ($page_name == 'student_add' ||
                 $page_name == 'student_bulk_add' ||
                 $page_name == 'student_information' ||
-                
+                $page_name == 'student_reregister' ||
                 $page_name == 'student_promotion')
             echo 'opened active has-sub';
         ?> ">
@@ -80,12 +80,84 @@
                         <span><i class="entypo-dot"></i> Student List</span>
                     </a>
                 </li>
-				
-				
+
+                <!-- RE-REGISTER -->
+                <li class="<?php if ($page_name == 'student_reregister') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/student_reregister">
+                        <span><i class="entypo-arrows-ccw"></i> Re-register Student</span>
+                    </a>
+                </li>
+
 
             </ul>
         </li>
 		
+        <!-- REPORTS — all reports consolidated here -->
+        <li class="<?php
+        if ($page_name == 'report_teachers' ||
+                $page_name == 'report_students' ||
+                $page_name == 'report_alumni' ||
+                $page_name == 'report_reregister')
+            echo 'opened active';
+        ?> ">
+            <a href="#">
+                <i class="entypo-chart-bar"></i>
+                <span>Reports</span>
+            </a>
+            <ul>
+                <li class="<?php if ($page_name == 'report_students') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/report_students">
+                        <span><i class="entypo-dot"></i> Students Report</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'report_teachers') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/report_teachers">
+                        <span><i class="entypo-dot"></i> Teachers Report</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'report_alumni') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/report_alumni">
+                        <span><i class="entypo-dot"></i> Alumni Report</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'report_reregister') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/report_reregister">
+                        <span><i class="entypo-dot"></i> Re-register History</span>
+                    </a>
+                </li>
+            </ul>
+        </li>
+
+        <!-- CLASS ROUTINE — timetable + attendance + sections, grouped together -->
+        <li class="<?php
+        if ($page_name == 'section' ||
+                $page_name == 'weekly_timetable' ||
+                $page_name == 'manage_attendance')
+            echo 'opened active';
+        ?> ">
+            <a href="#">
+                <i class="entypo-calendar"></i>
+                <span>Class Routine</span>
+            </a>
+            <ul>
+                <li class="<?php if ($page_name == 'section') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/section">
+                        <span><i class="entypo-dot"></i> Manage Teachers Time Table</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'weekly_timetable') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/weekly_timetable">
+                        <span><i class="entypo-dot"></i> Weekly Timetable</span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'manage_attendance') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/manage_attendance/<?php echo date('d/m/Y'); ?>">
+                        <span><i class="entypo-dot"></i> Manage Daily Attendance</span>
+                    </a>
+                </li>
+            </ul>
+        </li>
+
         <!-- MASTER DATA (board, lookups, salary structure) -->
         <li class="<?php
         if ($page_name == 'academic_syllabus' ||
@@ -170,12 +242,60 @@
             </a>
         </li>
 
-		 <!-- ENQUIRY TABLE INFO -->
-        <li class="<?php if ($page_name == 'enquiry') echo 'active'; ?> ">
-            <a href="<?php echo base_url(); ?>index.php?admin/enquiry">
+		 <!-- ENQUIRY / ADMISSION ENQUIRIES -->
+        <li class="<?php
+        if ($page_name == 'enquiry' ||
+                $page_name == 'enquiry_add' ||
+                $page_name == 'enquiry_follow' ||
+                $page_name == 'enquiry_bulk_add')
+            echo 'opened active has-sub';
+        ?> ">
+            <a href="#">
                 <i class="entypo-book"></i>
-                <span><?php echo get_phrase('all_enquiries'); ?></span>
+                <span><?php echo get_phrase('enquiries'); ?></span>
             </a>
+            <ul>
+                <li class="<?php if ($page_name == 'enquiry' || $page_name == 'enquiry_follow') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/enquiry">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('all_enquiries'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'enquiry_add') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/enquiry_add">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('add_enquiry'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'enquiry_bulk_add') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/enquiry_bulk_add">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('bulk_enquiry_import'); ?></span>
+                    </a>
+                </li>
+            </ul>
+        </li>
+
+		 <!-- COURSES -->
+        <li class="<?php
+        if ($page_name == 'course' ||
+                $page_name == 'course_add' ||
+                $page_name == 'course_view')
+            echo 'opened active has-sub';
+        ?> ">
+            <a href="#">
+                <i class="entypo-graduation-cap"></i>
+                <span><?php echo get_phrase('courses'); ?></span>
+            </a>
+            <ul>
+                <li class="<?php if ($page_name == 'course' || $page_name == 'course_view') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/course">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('manage_courses'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'course_add') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/course_add">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('new_course'); ?></span>
+                    </a>
+                </li>
+            </ul>
         </li>
 		
 		 <!-- LOAN PAGE (hidden) -->
@@ -257,21 +377,8 @@
             </a>
         </li>
 
-        <!-- MANAGE TEACHERS TIME TABLE -->
-        <li class="<?php if ($page_name == 'section') echo 'active'; ?> ">
-            <a href="<?php echo base_url(); ?>index.php?admin/section">
-                <i class="entypo-clock"></i>
-                <span>Manage Teachers Time Table</span>
-            </a>
-        </li>
+        <!-- MANAGE TEACHERS TIME TABLE + DAILY ATTENDANCE: moved under Class Routine parent above -->
 
-        <!-- MANAGE DAILY ATTENDANCE -->
-        <li class="<?php if ($page_name == 'manage_attendance') echo 'active'; ?> ">
-            <a href="<?php echo base_url(); ?>index.php?admin/manage_attendance/<?php echo date("d/m/Y"); ?>">
-                <i class="entypo-chart-area"></i>
-                <span>Manage Daily Attendance</span>
-            </a>
-        </li>
 
         <!-- SUBJECT (hidden) -->
         <?php /*

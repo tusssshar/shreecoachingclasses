@@ -8,22 +8,22 @@ foreach ( $edit_data as $row):
         	<div class="panel-heading">
             	<div class="panel-title" >
             		<i class="entypo-plus-circled"></i>
-					<?php echo get_phrase('edit_session');?>
+					Edit Academic Year
             	</div>
             </div>
 			<div class="panel-body">
-				
+
                 <?php echo form_open(base_url() . 'index.php?admin/session/do_update/'.$row['session_id'] , array('class' => 'form-horizontal form-groups-bordered validate','target'=>'_top'));?>
                     <div class="form-group">
-                        <label class="col-sm-3 control-label"><?php echo get_phrase('name');?></label>
+                        <label class="col-sm-3 control-label">Academic Year</label>
                         <div class="col-sm-5">
-                            <input type="text" class="form-control" name="name" value="<?php echo $row['name'];?>"/>
+                            <input type="text" class="form-control" name="name" value="<?php echo $row['name'];?>" pattern="^\d{4}-\d{4}$" title="Format: YYYY-YYYY"/>
                         </div>
                     </div>
-          
+
             		<div class="form-group">
 						<div class="col-sm-offset-3 col-sm-5">
-							<button type="submit" class="btn btn-info"><?php echo get_phrase('update_session');?></button>
+							<button type="submit" class="btn btn-info">Update Academic Year</button>
 						</div>
 					</div>
         		</form>

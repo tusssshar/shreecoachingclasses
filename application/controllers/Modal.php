@@ -112,12 +112,13 @@ class Modal extends CI_Controller {
 
     // Prefer the highest figure — if history is the most up-to-date use it,
     // but never undershoot a manually-entered payment_done value.
-    $total_paid = max($hist_paid, $legacy_paid, $student_paid);
+    // (sms_total_paid / sms_fee_remaining are unit tested in sms_core_helper.)
+    $total_paid = sms_total_paid($hist_paid, $legacy_paid, $student_paid);
 
     return array(
         'total_fees' => $total_fees,
         'paid'       => $total_paid,
-        'remaining'  => max($total_fees - $total_paid, 0)
+        'remaining'  => sms_fee_remaining($total_fees, $total_paid)
     );
 }
 }

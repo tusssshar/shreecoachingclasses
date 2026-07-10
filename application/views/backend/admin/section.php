@@ -32,8 +32,11 @@
                     <th>Class</th>
                     <th>Teacher</th>
                     <th>Days</th>
+                    <th>Session</th>
                     <th>Start Time</th>
                     <th>End Time</th>
+                    <th>Revision Section</th>
+                    <th>Lecture Subject</th>
                     <th><?php echo get_phrase('options');?></th>
                 </tr>
             </thead>
@@ -52,8 +55,11 @@
                         <td><?php echo !empty($class) ? $class->name : '';?></td>
                         <td><?php echo !empty($teacher) ? $teacher->name : '';?></td>
                         <td><?php echo !empty($row['days']) ? str_replace(',', ', ', $row['days']) : '';?></td>
+                        <td><?php echo htmlspecialchars($row['session_name'] ?? '');?></td>
                         <td><?php echo !empty($row['start_time']) ? date('h:i A', strtotime($row['start_time'])) : '';?></td>
                         <td><?php echo !empty($row['end_time']) ? date('h:i A', strtotime($row['end_time'])) : '';?></td>
+                        <td><?php echo htmlspecialchars($row['revision_section'] ?? '');?></td>
+                        <td><?php echo htmlspecialchars($row['lecture_subject'] ?? '');?></td>
                         <td>
                             <div class="btn-group">
                                 <button type="button" class="btn btn-default btn-sm dropdown-toggle" data-toggle="dropdown">

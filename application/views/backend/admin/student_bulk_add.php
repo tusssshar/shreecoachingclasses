@@ -101,6 +101,7 @@
                         'board'             => array('No',  'CBSE | ICSE | State Board | …'),
                         'sex'               => array('No',  'male | female'),
                         'school_name'       => array('No',  'Text'),
+                        'academic_year'     => array('No',  'YYYY-YYYY — e.g. 2025-2026 (defaults to current Indian AY if blank)'),
                         'total_fees'        => array('No',  'Number'),
                         'payment_amount'    => array('No',  'Number — creates a payment history row if > 0'),
                         'payment_date'      => array('No',  'YYYY-MM-DD'),

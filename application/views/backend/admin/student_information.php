@@ -44,18 +44,29 @@
             <div class="tab-pane active" id="home">
 
                 <!-- SEARCH FORM -->
+                <?php $selected_ay = $this->input->get('academic_year'); ?>
                 <div class="row" style="margin-bottom: 15px;">
                     <form id="searchForm">
                         <div class="col-sm-3">
-                            <input type="text" name="first_name" id="first_name" class="form-control" placeholder="First Name" value="">
+                            <input type="text" name="first_name" id="first_name" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars((string)$this->input->get('first_name')); ?>">
+                        </div>
+                        <div class="col-sm-2">
+                            <input type="text" name="last_name" id="last_name" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars((string)$this->input->get('last_name')); ?>">
                         </div>
                         <div class="col-sm-3">
-                            <input type="text" name="last_name" id="last_name" class="form-control" placeholder="Last Name" value="">
+                            <input type="text" name="email" id="email" class="form-control" placeholder="Email" value="<?php echo htmlspecialchars((string)$this->input->get('email')); ?>">
                         </div>
-                        <div class="col-sm-3">
-                            <input type="text" name="email" id="email" class="form-control" placeholder="Email" value="">
+                        <div class="col-sm-2">
+                            <select name="academic_year" id="academic_year" class="form-control">
+                                <option value="">All Batches</option>
+                                <?php foreach (($academic_years ?? array()) as $ay): ?>
+                                    <option value="<?php echo htmlspecialchars($ay); ?>" <?php if ($selected_ay === $ay) echo 'selected'; ?>>
+                                        <?php echo htmlspecialchars($ay); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
-                        <div class="col-sm-3">
+                        <div class="col-sm-2">
                             <button type="button" id="searchBtn" class="btn btn-primary">Search</button>
                             <button type="button" id="clearBtn" class="btn btn-default">Clear</button>
                         </div>
@@ -67,19 +78,19 @@
 
                         <thead>
                         <tr>
-                            <th>Roll</th>
+                            <th>STU ID</th>
                             <th>Photo</th>
-                            <th>First Name</th>
-                            <th>Middle Name</th>
-                            <th>Last Name</th>
+                            <th>Name</th>
                             <th>Sex</th>
                             <th>Father Mobile</th>
                             <th>Standard</th>
+                            <th>Batch</th>
                             <th>Medium</th>
                             <th>Board</th>
                             <th>Age</th>
                             <th>Remaining Fees</th>
                             <th>Email</th>
+                            <th>Status</th>
                             <th>Options</th>
                         </tr>
                         </thead>
@@ -106,25 +117,44 @@
                             }
                         ?>
 
+                        <?php
+                            // Build combined name from parts; fall back to name column
+                            $full_name = trim(
+                                ($row['first_name']  ?? '') . ' ' .
+                                ($row['middle_name'] ?? '') . ' ' .
+                                ($row['last_name']   ?? '')
+                            );
+                            if ($full_name === '') $full_name = $row['name'] ?? '';
+                        ?>
                         <tr>
-                            <td><?php echo $row['student_id'];?></td>
+                            <td><strong>STU-<?php echo str_pad((int)$row['student_id'], 5, '0', STR_PAD_LEFT); ?></strong></td>
 
                             <td>
-                                <img src="<?php echo $this->crud_model->get_image_url('student',$row['student_id']);?>" 
+                                <img src="<?php echo $this->crud_model->get_image_url('student',$row['student_id']);?>"
                                      width="30" class="img-circle">
                             </td>
 
-                            <td><?php echo $row['first_name'];?></td>
-                            <td><?php echo $row['middle_name'];?></td>
-                            <td><?php echo $row['last_name'];?></td>
+                            <td><strong><?php echo htmlspecialchars($full_name); ?></strong></td>
                             <td><?php echo $row['sex'];?></td>
                             <td><?php echo $row['fmobile'];?></td>
                             <td><?php echo $row['standard'];?></td>
+                            <td><?php echo htmlspecialchars($row['academic_year'] ?? '-');?></td>
                             <td><?php echo $row['medium'];?></td>
                             <td><?php echo $row['board'];?></td>
                             <td><?php echo $age;?></td>
                             <td><?php echo $remaining;?></td>
                             <td><?php echo $row['email'];?></td>
+
+                            <td>
+                                <?php if (!empty($row['is_reregister'])): ?>
+                                    <span class="label label-info" title="Created via re-register flow">Re-registered</span>
+                                <?php else: ?>
+                                    <span class="label label-default">New</span>
+                                <?php endif; ?>
+                                <?php if (!empty($row['is_alumni'])): ?>
+                                    <br><span class="label label-warning" style="margin-top:2px;">Alumni</span>
+                                <?php endif; ?>
+                            </td>
 
                             <td>
                                 <div class="btn-group">
@@ -143,6 +173,12 @@
                                         <li>
                                             <a href="#" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/modal_student_edit/<?php echo $row['student_id'];?>');">
                                                 Edit
+                                            </a>
+                                        </li>
+
+                                        <li>
+                                            <a href="#" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/modal_student_payment_add/<?php echo $row['student_id'];?>');">
+                                                <i class="entypo-credit-card"></i> Take Payment
                                             </a>
                                         </li>
 
@@ -221,27 +257,16 @@ $(document).ready(function () {
         scrollX: true
     });
 
-    // AJAX Search
-    $('#searchBtn').click(function() {
-        var first_name = $('#first_name').val();
-        var last_name = $('#last_name').val();
-        var email = $('#email').val();
-
-        $.ajax({
-            url: '<?php echo base_url(); ?>index.php?admin/search_students',
-            type: 'POST',
-            data: {
-                first_name: first_name,
-                last_name: last_name,
-                email: email
-            },
-            success: function(response) {
-                $('#table_export tbody').html(response);
-            },
-            error: function() {
-                alert('Search failed. Please try again.');
-            }
+    // Full-page search (so academic_year + all filters hit the server)
+    $('#searchBtn').click(function () {
+        var params = $.param({
+            first_name:    $('#first_name').val(),
+            last_name:     $('#last_name').val(),
+            email:         $('#email').val(),
+            academic_year: $('#academic_year').val()
         });
+        var url = '<?php echo base_url(); ?>index.php?admin/student_information/<?php echo (int)($class_id ?: 2); ?>&' + params;
+        window.location = url;
     });
 
     // Clear Search
@@ -249,7 +274,7 @@ $(document).ready(function () {
         $('#first_name').val('');
         $('#last_name').val('');
         $('#email').val('');
-        // Reload the page to show all students
+        $('#academic_year').val('');
         location.reload();
     });
 });

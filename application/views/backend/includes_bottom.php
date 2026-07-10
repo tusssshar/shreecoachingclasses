@@ -36,6 +36,8 @@
 	<script src="assets/js/neon-custom.js"></script>
 	<script src="assets/js/neon-demo.js"></script>
 
+	<script>window.SMS_BASE_URL = <?php echo json_encode(base_url()); ?>;</script>
+	<script src="assets/js/sms-print.js"></script>
 
 <!-- SHOW TOASTR NOTIFICATION (clears flash keys after rendering so they don't leak across pages) -->
 <?php

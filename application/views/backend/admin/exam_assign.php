@@ -82,9 +82,21 @@
     </div>
 </div>
 
+<style>
+/* Force modal above backdrop and ensure clicks register (Bootstrap 3 quirk on
+   ancestor-positioned containers). */
+#assignModal { z-index: 10500 !important; }
+#assignModal .modal-dialog { z-index: 10501 !important; }
+body > .modal-backdrop.in { z-index: 10400 !important; }
+</style>
 <script type="text/javascript">
 jQuery(document).ready(function ($) {
-    $("#table_export").dataTable();
+    // Re-parent the modal to <body> so it escapes any positioned ancestor that
+    // would otherwise re-root its position:fixed and let the backdrop cover it.
+    var $m = $('#assignModal');
+    if ($m.length && $m.parent().prop('tagName') !== 'BODY') $m.appendTo('body');
+
+    if ($.fn.dataTable) $("#table_export").dataTable();
 });
 
 function openAssignForm(class_id, subject_id, date, duration, session, class_name, subject_name) {
@@ -99,16 +111,17 @@ function openAssignForm(class_id, subject_id, date, duration, session, class_nam
 
     $.getJSON('<?php echo base_url(); ?>index.php?admin/exam_assign_students/' + class_id, function (students) {
         if (!students || students.length === 0) {
-            $('#studentListContainer').html('<em>No active students in this class.</em>');
+            $('#studentListContainer').html('<em>No active students in this class. Add students to this class first.</em>');
             return;
         }
         var html = '<table class="table table-striped table-condensed"><thead><tr>'
                  + '<th width="40"><input type="checkbox" id="checkAll"></th>'
-                 + '<th>Name</th><th>Roll</th><th>Email</th></tr></thead><tbody>';
+                 + '<th>Name</th><th>Student ID</th><th>Email</th></tr></thead><tbody>';
         students.forEach(function (s) {
+            var sid = String(s.student_id || '').padStart(5, '0');
             html += '<tr><td><input type="checkbox" name="student_ids[]" value="' + s.student_id + '" class="stuChk"></td>'
                   + '<td>' + (s.name || '') + '</td>'
-                  + '<td>' + (s.roll || '') + '</td>'
+                  + '<td>STU-' + sid + '</td>'
                   + '<td>' + (s.email || '') + '</td></tr>';
         });
         html += '</tbody></table>';
@@ -117,6 +130,17 @@ function openAssignForm(class_id, subject_id, date, duration, session, class_nam
         $('#checkAll').on('change', function () {
             $('.stuChk').prop('checked', this.checked);
         });
+    }).fail(function (xhr) {
+        $('#studentListContainer').html('<div class="alert alert-danger">Failed to load students. HTTP ' + xhr.status + '.</div>');
     });
 }
+
+// Block form submit if no students picked, so the controller never receives empty student_ids[]
+jQuery(document).on('submit', '#assignModal form', function (e) {
+    var picked = jQuery('#assignModal .stuChk:checked').length;
+    if (picked === 0) {
+        e.preventDefault();
+        alert('Please select at least one student before saving.');
+    }
+});
 </script>

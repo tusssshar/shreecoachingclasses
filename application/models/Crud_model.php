@@ -15,6 +15,34 @@ class Crud_model extends CI_Model {
     }
 
     /**
+     * Returns the list of Academic Years from the `session` table (admin-managed).
+     * Always merges in $also_include (e.g. the current Indian academic year, or the value
+     * already saved on the student row) so the dropdown never hides a still-relevant value.
+     */
+    function academic_years($also_include = array()) {
+        $list = array();
+        if ($this->db->table_exists('session')) {
+            $rows = $this->db->order_by('name', 'desc')->get('session')->result_array();
+            foreach ($rows as $r) {
+                $val = trim((string)$r['name']);
+                if ($val !== '') $list[] = $val;
+            }
+        }
+        foreach ((array)$also_include as $v) {
+            $v = trim((string)$v);
+            if ($v !== '' && !in_array($v, $list, true)) $list[] = $v;
+        }
+        if (empty($list)) {
+            $y = (int)date('Y'); $m = (int)date('n');
+            $list[] = $m >= 4 ? ($y . '-' . ($y + 1)) : (($y - 1) . '-' . $y);
+        }
+        // De-dupe + sort newest first
+        $list = array_values(array_unique($list));
+        rsort($list);
+        return $list;
+    }
+
+    /**
      * Returns active values for a lookup category (Medium, Payment Type, Payment Mode, ...).
      * Falls back to the supplied defaults if the table doesn't exist or has no rows yet.
      */
@@ -89,6 +117,9 @@ class Crud_model extends CI_Model {
         }
         if (!empty($filters['email'])) {
             $this->db->like('email', $filters['email']);
+        }
+        if (!empty($filters['academic_year']) && $this->db->field_exists('academic_year', 'student')) {
+            $this->db->where('academic_year', $filters['academic_year']);
         }
 
         $this->db->order_by('student_id', 'desc');
@@ -226,12 +257,9 @@ class Crud_model extends CI_Model {
     }
 
     function get_grade($mark_obtained) {
-        $query = $this->db->get('grade');
-        $grades = $query->result_array();
-        foreach ($grades as $row) {
-            if ($mark_obtained >= $row['mark_from'] && $mark_obtained <= $row['mark_upto'])
-                return $row;
-        }
+        $grades = $this->db->get('grade')->result_array();
+        // Range-matching logic lives in sms_core_helper (unit tested).
+        return sms_match_grade($grades, $mark_obtained);
     }
 
     function create_log($data) {

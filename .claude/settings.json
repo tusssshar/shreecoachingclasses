@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n ''\\\\''is_alumni'\\\\''         => $this->input->post\\\\|'\\\\''medium'\\\\''.*$this->input->post\\\\|extractPaymentsFromPost' c:/xampp/htdocs/sms/application/controllers/Admin.php)",
+      "Bash(php c:/xampp/htdocs/sms/uri_chars_test.php)",
+      "Bash(grep -n '_filter_uri\\\\|explode.*/.*$str' c:/xampp/htdocs/sms/system/core/URI.php)",
+      "Bash(php c:/xampp/htdocs/sms/schema_audit.php)",
+      "Bash(php -r '$m = new mysqli\\(\"localhost\",\"root\",\"\",\"smsDB\"\\); foreach\\([\"school\",\"academic_year\",\"student_mobile\",\"previous_student_id\",\"is_alumni\"] as $c\\){ $r=$m->query\\(\"SHOW COLUMNS FROM student LIKE \\\\x27$c\\\\x27\"\\); echo str_pad\\($c,25\\).\" => \".\\($r->num_rows?\"PRESENT\":\"MISSING\"\\).\"\\\\n\"; }')",
+      "Bash(php -r '$m=new mysqli\\(\"localhost\",\"root\",\"\",\"smsDB\"\\); $m->query\\(\"ALTER TABLE student ADD school VARCHAR\\(255\\) NULL\"\\); echo $m->error?:\"ok\\\\n\"; $r=$m->query\\(\"SHOW COLUMNS FROM student LIKE \\\\x27school\\\\x27\"\\); echo $r->num_rows?\"school: PRESENT\\\\n\":\"school: MISSING\\\\n\";')",
+      "Bash(php -r '$m=new mysqli\\(\"localhost\",\"root\",\"\",\"smsDB\"\\); $r=$m->query\\(\"SHOW COLUMNS FROM enquiry\"\\); while\\($row=$r->fetch_assoc\\(\\)\\)echo $row[\"Field\"].\"\\\\n\";')",
+      "Bash(php -r '$m=new mysqli\\(\"localhost\",\"root\",\"\",\"smsDB\"\\); echo \"enquiry_category:\\\\n\"; $r=$m->query\\(\"SHOW COLUMNS FROM enquiry_category\"\\); while\\($row=$r->fetch_assoc\\(\\)\\)echo \" - \".$row[\"Field\"].\"\\\\n\";')",
+      "Bash(php -r '$m=new mysqli\\(\"localhost\",\"root\",\"\",\"smsDB\"\\); echo \"answer:\\\\n\"; $r=$m->query\\(\"SHOW COLUMNS FROM answer\"\\); while\\($row=$r->fetch_assoc\\(\\)\\)echo \" - \".$row[\"Field\"].\"\\\\n\";')",
+      "Bash(grep -n \"^</div>$\\\\|RE-REGISTER MODAL\" c:/xampp/htdocs/sms/application/views/backend/admin/student_reregister.php)",
+      "Bash(php -r '$m=new mysqli\\(\"localhost\",\"root\",\"\",\"smsDB\"\\); $r=$m->query\\(\"SELECT student_id, name, father_name, mother_name FROM student WHERE student_id IN \\(16,17,19,21,23\\) ORDER BY student_id\"\\); while\\($row=$r->fetch_assoc\\(\\)\\) echo \"ID {$row[\"student_id\"]}: name=\\\\\"{$row[\"name\"]}\\\\\" father=\\\\\"{$row[\"father_name\"]}\\\\\" mother=\\\\\"{$row[\"mother_name\"]}\\\\\"\\\\n\";')",
+      "Bash(php -r ' *)"
+    ]
+  }
+}

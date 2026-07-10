@@ -1,6 +1,15 @@
 <?php
 $student_info	=	$this->crud_model->get_student_info($param2);
-foreach($student_info as $row):?>
+foreach($student_info as $row):
+    $parent = null;
+    $section = null;
+    if (!empty($row['parent_id'])) {
+        $parent = $this->db->get_where('parent', array('parent_id' => $row['parent_id']))->row();
+    }
+    if (!empty($row['section_id'])) {
+        $section = $this->db->get_where('section', array('section_id' => $row['section_id']))->row();
+    }
+?>
 
 <div class="profile-env">
 	
@@ -48,7 +57,7 @@ foreach($student_info as $row):?>
                     <?php if($row['section_id'] != '' && $row['section_id'] != 0):?>
                     <tr>
                         <td>Section</td>
-                        <td><b><?php echo $this->db->get_where('section' , array('section_id' => $row['section_id']))->row()->name;?></b></td>
+                        <td><b><?php echo $section ? htmlspecialchars($section->name) : '-';?></b></td>
                     </tr>
                     <?php endif;?>
                 
@@ -95,14 +104,14 @@ foreach($student_info as $row):?>
                         </td>
                     </tr>
                     <?php endif;?>
-                    <?php if($row['parent_id'] != ''):?>
+                    <?php if(!empty($row['parent_id'])):?>
                     <tr>
                         <td>Parent</td>
-                        <td><b><?php echo $this->db->get_where('parent' , array('parent_id' => $row['parent_id']))->row()->name;?></b></td>
+                        <td><b><?php echo $parent ? htmlspecialchars($parent->name) : '-';?></b></td>
                     </tr>
                     <tr>
                         <td>Parent Phone</td>
-                        <td><b><?php echo $this->db->get_where('parent' , array('parent_id' => $row['parent_id']))->row()->phone;?></b></td>
+                        <td><b><?php echo $parent ? htmlspecialchars($parent->phone) : '-';?></b></td>
                     </tr>
                     <?php endif;?>
                     
