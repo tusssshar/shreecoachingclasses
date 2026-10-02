@@ -1,8 +1,14 @@
-SHREE COACHING CLASSES - TEST LOGINS (demo data)
+SHREE COACHING CLASSES - LOGINS
 Login page: http://localhost/sms/
 Updated: 02-Oct-2026 (all 7 logins verified working).
-DEMO DATA ONLY - change every password before real use (start with admin/admin).
 The web server blocks this file (.htaccess), so it cannot be opened from the browser.
+
+******************************************************************************************
+*  [DUMMY] = FAKE DEMO DATA, created only for testing. These people do not exist.         *
+*  Names, emails and phone numbers (90000 00xxx) are made up. Before going live:         *
+*    - delete or replace every [DUMMY] record, and                                       *
+*    - change the admin password (admin/admin is the default).                           *
+******************************************************************************************
 
 SETUP ON A NEW MACHINE
 1. Put the project in C:\xampp\htdocs\sms and start Apache + MySQL (XAMPP).
@@ -11,32 +17,37 @@ SETUP ON A NEW MACHINE
 4. Settings > Email Settings: enter Gmail address + App Password (blank in the dump).
    Settings > SMS Settings: enter Twilio details if WhatsApp/SMS is needed (blank in the dump).
 
-==========================================================================================================
- #  ROLE      LOGIN (EMAIL)                          PASSWORD   NAME / DETAILS
-==========================================================================================================
- 1  Admin     admin@admin.com                        admin      Shree Manager (full access)
+==============================================================================================================
+ #  DATA      ROLE      LOGIN (EMAIL)                          PASSWORD   NAME / DETAILS
+==============================================================================================================
+ 1  SYSTEM    Admin     admin@admin.com                        admin      Shree Manager - real admin account
+                                                                          (default password: CHANGE IT)
 
- 2  Teacher   rajesh.kulkarni.maths@yahoo.com        password   Rajesh Kulkarni - Maths, English, Social Studies,
-                                                                Hindi etc.; class teacher of Jr KG to 10th
-                                                                (marks attendance for Tanvi's class)
- 3  Teacher   priya.nair.science@gmail.com           password   Priya Nair - Science, Physics, Chemistry, Biology;
-                                                                class teacher of 11th-12th
-                                                                (marks attendance for Sneha's class)
+ 2  [DUMMY]   Teacher   rajesh.kulkarni.maths@yahoo.com        password   Rajesh Kulkarni - Maths, English, Social Studies,
+                                                                          Hindi etc.; class teacher of Jr KG to 10th
+                                                                          (marks attendance for Tanvi's class)
+ 3  [DUMMY]   Teacher   priya.nair.science@gmail.com           password   Priya Nair - Science, Physics, Chemistry, Biology;
+                                                                          class teacher of 11th-12th
+                                                                          (marks attendance for Sneha's class)
 
- 4  Parent    kiran.joshi.parent@yahoo.com           password   Kiran Joshi - parent of Tanvi (10th)
- 5  Parent    rajendra.kulkarni.parent@yahoo.com     password   Rajendra Kulkarni - parent of Sneha (11th)
+ 4  [DUMMY]   Parent    kiran.joshi.parent@yahoo.com           password   Kiran Joshi - parent of Tanvi (10th)
+ 5  [DUMMY]   Parent    rajendra.kulkarni.parent@yahoo.com     password   Rajendra Kulkarni - parent of Sneha (11th)
 
- 6  Student   tanvi.joshi29@gmail.com                password   Tanvi Kiran Joshi - 10th
- 7  Student   sneha.kulkarni31@gmail.com             password   Sneha Rajendra Kulkarni - 11th
-==========================================================================================================
+ 6  [DUMMY]   Student   tanvi.joshi29@gmail.com                password   Tanvi Kiran Joshi - 10th
+ 7  [DUMMY]   Student   sneha.kulkarni31@gmail.com             password   Sneha Rajendra Kulkarni - 11th
+==============================================================================================================
 
-WHAT EACH LOGIN SHOWS (demo data)
+[DUMMY] DEMO RECORDS IN THE DATABASE (all fake, for testing only)
 - Online exams per student class:
     Weekly Quiz 1 ...... taken last week, result PUBLISHED (student/parent can see it)
     Weekly Quiz 2 ...... taken 3 days ago, NOT published yet (teacher: Paper Checking; admin: publish)
-    Practice Test ...... OPEN TODAY 00:05-23:55, 15 min (student: My Online Exams > Start Exam)
-    Chapter Test ....... upcoming in 3 days, 5-6 PM
-- Written exams: Unit Test 1 (marks entered, results published) and Mid Term Exam (in 12 days).
-- Attendance: last 3 weeks filled; today is blank so the class teacher can mark it.
+    Practice Test ...... OPEN on 02-Oct-2026 00:05-23:55, 15 min (student: My Online Exams > Start Exam)
+    Chapter Test ....... upcoming on 05-Oct-2026, 5-6 PM
+- Written exams: Unit Test 1 (marks entered, results published) and Mid Term Exam (14-Oct-2026).
+- Attendance: 3 weeks before 02-Oct-2026 filled in.
 - Fees: Tanvi 0 of 30,000 paid (balance due); Sneha 28,000 of 40,000 paid (2 installments).
-- Grades A1-E, 4 notices and 5 holidays are set up.
+- Notices (4) and holidays (5).
+
+REAL SETUP DATA (keep)
+- Classes Jr KG to 12th, their subjects and sections.
+- Grades A1-E, 7 languages, theme and school settings.
