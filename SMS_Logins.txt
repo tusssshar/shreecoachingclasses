@@ -1,0 +1,42 @@
+SHREE COACHING CLASSES - TEST LOGINS (demo data)
+Login page: http://localhost/sms/
+Updated: 02-Oct-2026 (all 7 logins verified working).
+DEMO DATA ONLY - change every password before real use (start with admin/admin).
+The web server blocks this file (.htaccess), so it cannot be opened from the browser.
+
+SETUP ON A NEW MACHINE
+1. Put the project in C:\xampp\htdocs\sms and start Apache + MySQL (XAMPP).
+2. Create an empty database "smsDB" and import:  mysql -u root smsDB < database/smsdb.sql
+3. Open http://localhost/sms/ and log in as admin.
+4. Settings > Email Settings: enter Gmail address + App Password (blank in the dump).
+   Settings > SMS Settings: enter Twilio details if WhatsApp/SMS is needed (blank in the dump).
+
+==========================================================================================================
+ #  ROLE      LOGIN (EMAIL)                          PASSWORD   NAME / DETAILS
+==========================================================================================================
+ 1  Admin     admin@admin.com                        admin      Shree Manager (full access)
+
+ 2  Teacher   rajesh.kulkarni.maths@yahoo.com        password   Rajesh Kulkarni - Maths, English, Social Studies,
+                                                                Hindi etc.; class teacher of Jr KG to 10th
+                                                                (marks attendance for Tanvi's class)
+ 3  Teacher   priya.nair.science@gmail.com           password   Priya Nair - Science, Physics, Chemistry, Biology;
+                                                                class teacher of 11th-12th
+                                                                (marks attendance for Sneha's class)
+
+ 4  Parent    kiran.joshi.parent@yahoo.com           password   Kiran Joshi - parent of Tanvi (10th)
+ 5  Parent    rajendra.kulkarni.parent@yahoo.com     password   Rajendra Kulkarni - parent of Sneha (11th)
+
+ 6  Student   tanvi.joshi29@gmail.com                password   Tanvi Kiran Joshi - 10th
+ 7  Student   sneha.kulkarni31@gmail.com             password   Sneha Rajendra Kulkarni - 11th
+==========================================================================================================
+
+WHAT EACH LOGIN SHOWS (demo data)
+- Online exams per student class:
+    Weekly Quiz 1 ...... taken last week, result PUBLISHED (student/parent can see it)
+    Weekly Quiz 2 ...... taken 3 days ago, NOT published yet (teacher: Paper Checking; admin: publish)
+    Practice Test ...... OPEN TODAY 00:05-23:55, 15 min (student: My Online Exams > Start Exam)
+    Chapter Test ....... upcoming in 3 days, 5-6 PM
+- Written exams: Unit Test 1 (marks entered, results published) and Mid Term Exam (in 12 days).
+- Attendance: last 3 weeks filled; today is blank so the class teacher can mark it.
+- Fees: Tanvi 0 of 30,000 paid (balance due); Sneha 28,000 of 40,000 paid (2 installments).
+- Grades A1-E, 4 notices and 5 holidays are set up.

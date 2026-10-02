@@ -26,6 +26,3 @@ application/cache/*
 # Sessions
 application/sessions/*
 !application/sessions/index.html
-
-# Private login notes (dummy passwords) - never commit
-SMS_Logins.txt
