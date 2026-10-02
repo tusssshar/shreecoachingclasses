@@ -1,146 +1,98 @@
 <hr>
 <div class="panel panel-gradient">
     <div class="panel-heading">
-        <div class="panel-title">Assign Exam to Student</div>
+        <div class="panel-title"><?php echo get_phrase('assign_exam_to_students'); ?></div>
     </div>
     <div class="panel-body">
 
-        <?php if ($this->session->flashdata('flash_message')): ?>
-            <div class="alert alert-success"><?php echo $this->session->flashdata('flash_message'); ?></div>
-        <?php endif; ?>
+        <form class="form-inline" style="margin-bottom:15px;" onsubmit="if(this.exam.value){location.href='<?php echo base_url(); ?>index.php?admin/exam_assign/'+this.exam.value;} return false;">
+            <label><?php echo get_phrase('exam'); ?>:</label>
+            <select name="exam" class="form-control" style="min-width:380px;" onchange="this.form.onsubmit()">
+                <option value=""><?php echo get_phrase('select_exam'); ?></option>
+                <?php foreach ($exams as $e): list($o) = sms_cbt_window($e); ?>
+                    <option value="<?php echo $e['exam_id']; ?>" <?php if (isset($exam) && $exam['exam_id'] == $e['exam_id']) echo 'selected'; ?>>
+                        <?php echo html_escape($e['title'] . ' - ' . $e['class_name'] . ' / ' . $e['subject_name'] . ' (' . ($o ? date('d M Y', $o) : '-') . ')'); ?>
+                        <?php echo $e['status'] == 'draft' ? ' [' . get_phrase('draft') . ']' : ''; ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </form>
 
-        <?php if (empty($exam_groups)): ?>
-            <div class="alert alert-info">No CBT exams found. Create one via <a href="<?php echo base_url(); ?>index.php?admin/exam_add">Add Exam</a>.</div>
-        <?php else: ?>
-            <div class="table-responsive">
-                <table class="table table-bordered datatable" id="table_export">
+        <?php if (!isset($exam)): ?>
+            <p class="text-muted"><?php echo get_phrase('select_an_exam_to_assign_students'); ?></p>
+        <?php else: list($opens, $closes) = sms_cbt_window($exam); ?>
+
+            <div class="well well-sm">
+                <strong><?php echo html_escape($exam['title']); ?></strong> <?php echo sms_cbt_state_badge($state); ?> &middot;
+                <?php echo html_escape($exam['class_name']); ?> / <?php echo html_escape($exam['subject_name']); ?> &middot;
+                <?php echo $opens ? date('d M Y, h:i A', $opens) . ' - ' . date('h:i A', $closes) : '-'; ?> &middot;
+                <?php echo (int)$exam['duration']; ?> <?php echo get_phrase('min'); ?>
+            </div>
+
+            <?php if ($exam['status'] != 'published'): ?>
+                <div class="alert alert-warning">
+                    <?php echo get_phrase('publish_the_exam_before_assigning_it'); ?>
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_view/<?php echo $exam['exam_id']; ?>" class="btn btn-xs btn-default"><?php echo get_phrase('open_exam'); ?></a>
+                </div>
+            <?php elseif ($state == 'closed'): ?>
+                <div class="alert alert-warning"><?php echo get_phrase('this_exam_has_already_closed'); ?></div>
+            <?php endif; ?>
+
+            <?php if (empty($students)): ?>
+                <div class="alert alert-info"><?php echo get_phrase('no_active_students_in_this_class'); ?></div>
+            <?php else: ?>
+            <?php echo form_open(base_url() . 'index.php?admin/exam_assign/' . $exam['exam_id'] . '/save'); ?>
+                <table class="table table-bordered table-condensed">
                     <thead>
                         <tr>
-                            <th>#</th>
-                            <th>Class</th>
-                            <th>Subject</th>
-                            <th>Date</th>
-                            <th>Duration</th>
-                            <th>Session</th>
-                            <th>Questions</th>
-                            <th>Assigned</th>
-                            <th>Action</th>
+                            <th style="width:40px;"><input type="checkbox" id="check_all" title="<?php echo get_phrase('select_all'); ?>"></th>
+                            <th><?php echo get_phrase('roll'); ?></th>
+                            <th><?php echo get_phrase('student'); ?></th>
+                            <th><?php echo get_phrase('email'); ?></th>
+                            <th><?php echo get_phrase('status'); ?></th>
+                            <th><?php echo get_phrase('email_sent'); ?></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
-                    <?php $i = 1; foreach ($exam_groups as $row): ?>
-                        <tr>
-                            <td><?php echo $i++; ?></td>
-                            <td><?php echo htmlspecialchars($row['class_name']); ?></td>
-                            <td><?php echo htmlspecialchars($row['subject_name']); ?></td>
-                            <td><?php echo htmlspecialchars($row['date']); ?></td>
-                            <td><?php echo (int)$row['duration']; ?> min</td>
-                            <td><?php echo htmlspecialchars($row['session']); ?></td>
-                            <td><?php echo (int)$row['actual_questions']; ?></td>
-                            <td><?php echo (int)$row['assigned_count']; ?></td>
+                    <?php foreach ($students as $s): $a = isset($assigned[$s['student_id']]) ? $assigned[$s['student_id']] : null; ?>
+                        <tr class="<?php echo $a ? 'success' : ''; ?>">
+                            <td><?php if (!$a): ?><input type="checkbox" class="student_cb" name="student_ids[]" value="<?php echo $s['student_id']; ?>"><?php else: ?><i class="entypo-check"></i><?php endif; ?></td>
+                            <td><?php echo html_escape($s['roll']); ?></td>
+                            <td><?php echo html_escape($s['name']); ?></td>
                             <td>
-                                <button type="button" class="btn btn-info btn-sm"
-                                    onclick="openAssignForm(<?php echo (int)$row['class_id']; ?>, <?php echo (int)$row['subject_id']; ?>, '<?php echo htmlspecialchars($row['date']); ?>', <?php echo (int)$row['duration']; ?>, '<?php echo htmlspecialchars(addslashes($row['session'])); ?>', '<?php echo htmlspecialchars($row['class_name'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($row['subject_name'], ENT_QUOTES); ?>')">
-                                    <i class="entypo-users"></i> Assign Students
-                                </button>
+                                <?php echo $s['email'] ? html_escape($s['email']) : '<span class="text-danger">' . get_phrase('no_email') . '</span>'; ?>
+                                <?php if (!empty($s['parent_email'])): ?><br><small class="text-muted"><?php echo get_phrase('parent'); ?>: <?php echo html_escape($s['parent_email']); ?></small><?php endif; ?>
+                            </td>
+                            <td><?php echo $a ? sms_attempt_badge($a['status']) : '<span class="text-muted">' . get_phrase('not_assigned') . '</span>'; ?></td>
+                            <td><?php echo ($a && $a['notified_at']) ? date('d M, h:i A', $a['notified_at']) : '-'; ?></td>
+                            <td>
+                                <?php if ($a && $a['status'] == 'assigned'): ?>
+                                    <a href="#" class="btn btn-xs btn-default" onclick="confirm_modal('<?php echo base_url(); ?>index.php?admin/exam_assign/<?php echo $exam['exam_id']; ?>/remove/<?php echo $s['student_id']; ?>'); return false;"><?php echo get_phrase('remove'); ?></a>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
                 </table>
-            </div>
+                <?php if ($exam['status'] == 'published' && $state != 'closed'): ?>
+                    <button type="submit" class="btn btn-primary"><i class="entypo-paper-plane"></i> <?php echo get_phrase('assign_selected_and_email'); ?></button>
+                    <?php echo sms_preview_button('cbt_scheduled', $exam['exam_id'], 0, get_phrase('preview_exam_email'), 'md'); ?>
+                    <?php echo sms_preview_button('cbt_reminder', $exam['exam_id'], 0, get_phrase('preview_reminder'), 'md'); ?>
+                    <span class="text-muted" style="margin-left:8px;"><?php echo get_phrase('assign_email_hint'); ?></span>
+                <?php endif; ?>
+            <?php echo form_close(); ?>
+            <?php endif; ?>
         <?php endif; ?>
-
     </div>
 </div>
-
-<!-- ASSIGN MODAL -->
-<div class="modal fade" id="assignModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <form method="post" action="<?php echo base_url(); ?>index.php?admin/exam_assign/save">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal">&times;</button>
-                    <h4 class="modal-title">Assign Students <small id="assignSubtitle"></small></h4>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" name="class_id" id="assign_class_id">
-                    <input type="hidden" name="subject_id" id="assign_subject_id">
-                    <input type="hidden" name="date" id="assign_date">
-                    <input type="hidden" name="duration" id="assign_duration">
-                    <input type="hidden" name="session" id="assign_session">
-
-                    <p>Select students of this class to assign the exam to:</p>
-                    <div id="studentListContainer">Loading students&hellip;</div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Assignments</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<style>
-/* Force modal above backdrop and ensure clicks register (Bootstrap 3 quirk on
-   ancestor-positioned containers). */
-#assignModal { z-index: 10500 !important; }
-#assignModal .modal-dialog { z-index: 10501 !important; }
-body > .modal-backdrop.in { z-index: 10400 !important; }
-</style>
-<script type="text/javascript">
-jQuery(document).ready(function ($) {
-    // Re-parent the modal to <body> so it escapes any positioned ancestor that
-    // would otherwise re-root its position:fixed and let the backdrop cover it.
-    var $m = $('#assignModal');
-    if ($m.length && $m.parent().prop('tagName') !== 'BODY') $m.appendTo('body');
-
-    if ($.fn.dataTable) $("#table_export").dataTable();
-});
-
-function openAssignForm(class_id, subject_id, date, duration, session, class_name, subject_name) {
-    $('#assign_class_id').val(class_id);
-    $('#assign_subject_id').val(subject_id);
-    $('#assign_date').val(date);
-    $('#assign_duration').val(duration);
-    $('#assign_session').val(session);
-    $('#assignSubtitle').text('— ' + class_name + ' / ' + subject_name + ' / ' + date);
-    $('#studentListContainer').html('Loading students…');
-    $('#assignModal').modal('show');
-
-    $.getJSON('<?php echo base_url(); ?>index.php?admin/exam_assign_students/' + class_id, function (students) {
-        if (!students || students.length === 0) {
-            $('#studentListContainer').html('<em>No active students in this class. Add students to this class first.</em>');
-            return;
-        }
-        var html = '<table class="table table-striped table-condensed"><thead><tr>'
-                 + '<th width="40"><input type="checkbox" id="checkAll"></th>'
-                 + '<th>Name</th><th>Student ID</th><th>Email</th></tr></thead><tbody>';
-        students.forEach(function (s) {
-            var sid = String(s.student_id || '').padStart(5, '0');
-            html += '<tr><td><input type="checkbox" name="student_ids[]" value="' + s.student_id + '" class="stuChk"></td>'
-                  + '<td>' + (s.name || '') + '</td>'
-                  + '<td>STU-' + sid + '</td>'
-                  + '<td>' + (s.email || '') + '</td></tr>';
-        });
-        html += '</tbody></table>';
-        $('#studentListContainer').html(html);
-
-        $('#checkAll').on('change', function () {
-            $('.stuChk').prop('checked', this.checked);
-        });
-    }).fail(function (xhr) {
-        $('#studentListContainer').html('<div class="alert alert-danger">Failed to load students. HTTP ' + xhr.status + '.</div>');
+<script>
+(function () {
+    var all = document.getElementById('check_all');
+    if (!all) return;
+    all.addEventListener('change', function () {
+        var cbs = document.querySelectorAll('.student_cb');
+        for (var i = 0; i < cbs.length; i++) cbs[i].checked = all.checked;
     });
-}
-
-// Block form submit if no students picked, so the controller never receives empty student_ids[]
-jQuery(document).on('submit', '#assignModal form', function (e) {
-    var picked = jQuery('#assignModal .stuChk:checked').length;
-    if (picked === 0) {
-        e.preventDefault();
-        alert('Please select at least one student before saving.');
-    }
-});
+})();
 </script>

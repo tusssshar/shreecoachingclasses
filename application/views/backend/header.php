@@ -60,15 +60,15 @@
 				
 				<ul class="dropdown-menu <?php if ($text_align == 'left-to-right') echo 'pull-left'; else echo 'pull-right';?>">
 					<?php
-                            $fields = $this->db->list_fields('language');
-                            foreach ($fields as $field)
+                            $__lang_row = $this->db->get_where('settings', array('type' => 'language'))->row();
+                            $__current_lang = $__lang_row ? $__lang_row->description : 'english';
+                            foreach (sms_language_columns($this->db->list_fields('language')) as $field)
                             {
-                                if($field == 'phrase_id' || $field == 'phrase')continue;
                                 ?>
-                                    <li class="<?php if($this->session->userdata('current_language') == $field)echo 'active';?>">
+                                    <li class="<?php if($__current_lang == $field)echo 'active';?>">
                                         <a href="<?php echo base_url();?>index.php?multilanguage/select_language/<?php echo $field;?>">
-                                            <img src="assets/images/flag/<?php echo $field;?>.png" style="width:16px; height:16px;" />	
-												 <span><?php echo $field;?></span>
+                                            <i class="entypo-<?php echo $__current_lang == $field ? 'check' : 'globe';?>"></i>
+												 <span><?php echo html_escape(sms_language_label($field));?></span>
                                         </a>
                                     </li>
                                 <?php

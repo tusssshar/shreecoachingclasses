@@ -71,7 +71,9 @@ var neonLogin = neonLogin || {};
 						},
 						error: function()
 						{
-							//alert("An error occoured!");
+							// AJAX reply unreadable (e.g. a server warning in the output): fall back to one
+							// normal form post to login/do_login. Native submit() skips this handler, so it runs once.
+							document.getElementById('form_login').submit();
 						},
 						success: function(response)
 						{

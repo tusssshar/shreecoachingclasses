@@ -57,6 +57,12 @@
     define('ENVIRONMENT', 'development');
 
 /*
+ * The school runs on Indian time. XAMPP's php.ini defaults to Europe/Berlin, which made
+ * exam start times, dates and timestamps 3.5 hours off. Set here so other XAMPP sites are unaffected.
+ */
+date_default_timezone_set('Asia/Kolkata');
+
+/*
  * Compatibility for CodeIgniter QUERY_STRING routing.
  * The app routes pages as index.php?admin/method, so extra query parameters
  * after an ampersand become part of the routed URI. Keep this narrow for the

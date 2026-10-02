@@ -32,10 +32,16 @@ class Multilanguage extends CI_Controller
 	
 	function select_language($language = 'english')
 	{
-		$this->session->set_userdata('current_language', $language);
-        $sql = "update settings set description='" . $language . "' where type='language'";
-        $this->db->query($sql);
-		redirect(base_url(), 'refresh');
+		// Logged-in users only, and only an existing language column (was raw SQL from the URL).
+		if (!$this->session->userdata('login_type'))
+			redirect(base_url() . 'index.php?login', 'refresh');
+		if (sms_is_language($language, $this->db->list_fields('language'))) {
+			$this->session->set_userdata('current_language', $language);
+			$this->db->where('type', 'language');
+			$this->db->update('settings', array('description' => $language));
+		}
+		$back = $this->input->server('HTTP_REFERER');
+		redirect($back && strpos($back, base_url()) === 0 ? $back : base_url(), 'refresh');
 	}
 	
 	

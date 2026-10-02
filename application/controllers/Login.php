@@ -157,7 +157,6 @@ class Login extends CI_Controller {
         //Recieving post input of email, password from ajax request
         $email = $_POST["email"];
         $password = $_POST["password"];
-        $response['submitted_data'] = $_POST;
 
         //Validating login
         $login_status = $this->validate_login($email, $password);
@@ -190,16 +189,21 @@ class Login extends CI_Controller {
         exit; // Ensure clean exit
     }
 
+    /** Find a user by email whose password matches (bcrypt hash or legacy plain text; see sms_password_matches). */
+    private function find_user($table, $email, $password) {
+        if (trim((string)$email) === '' || (string)$password === '') return null;
+        foreach ($this->db->get_where($table, array('email' => $email))->result() as $row)
+            if (sms_password_matches($password, $row->password)) return $row;
+        return null;
+    }
+
     //Validating login from ajax request
     function validate_login($email = '', $password = '') {
-        $credential = array('email' => $email, 'password' => $password);
         $this->session_debug('validate_login_start', array('email' => $email));
 
         // Checking login credential for admin
-        $query = $this->db->get_where('admin', $credential);
-        
-        if ($query->num_rows() > 0) {
-            $row = $query->row();
+        $row = $this->find_user('admin', $email, $password);
+        if ($row) {
 
             $this->session->set_userdata(array(
                 'admin_login'   => 1,
@@ -214,9 +218,8 @@ class Login extends CI_Controller {
         }
 
         // Checking login credential for teacher
-        $query = $this->db->get_where('teacher', $credential);
-        if ($query->num_rows() > 0) {
-            $row = $query->row();
+        $row = $this->find_user('teacher', $email, $password);
+        if ($row) {
             $this->session->set_userdata(array(
                 'teacher_login' => 1,
                 'teacher_id'    => $row->teacher_id,
@@ -229,9 +232,8 @@ class Login extends CI_Controller {
         }
 		
         // Checking login credential for student
-        $query = $this->db->get_where('student', $credential);
-        if ($query->num_rows() > 0) {
-            $row = $query->row();
+        $row = $this->find_user('student', $email, $password);
+        if ($row) {
             $this->session->set_userdata(array(
                 'student_login' => 1,
                 'student_id'    => $row->student_id,
@@ -244,9 +246,8 @@ class Login extends CI_Controller {
         }
 
         // Checking login credential for parent
-        $query = $this->db->get_where('parent', $credential);
-        if ($query->num_rows() > 0) {
-            $row = $query->row();
+        $row = $this->find_user('parent', $email, $password);
+        if ($row) {
             $this->session->set_userdata(array(
                 'parent_login'  => 1,
                 'parent_id'     => $row->parent_id,
@@ -260,9 +261,8 @@ class Login extends CI_Controller {
 		
 		
 		// Checking login credential for librarian
-        $query = $this->db->get_where('librarian', $credential);
-        if ($query->num_rows() > 0) {
-            $row = $query->row();
+        $row = $this->find_user('librarian', $email, $password);
+        if ($row) {
             $this->session->set_userdata(array(
                 'librarian_login' => 1,
                 'librarian_id'    => $row->librarian_id,
@@ -276,9 +276,8 @@ class Login extends CI_Controller {
 		
 		
 		// Checking login credential for accountant
-        $query = $this->db->get_where('accountant', $credential);
-        if ($query->num_rows() > 0) {
-            $row = $query->row();
+        $row = $this->find_user('accountant', $email, $password);
+        if ($row) {
             $this->session->set_userdata(array(
                 'accountant_login' => 1,
                 'accountant_id'    => $row->accountant_id,
@@ -292,9 +291,8 @@ class Login extends CI_Controller {
 		
 		
 		// Checking login credential for hostel
-        $query = $this->db->get_where('hostel', $credential);
-        if ($query->num_rows() > 0) {
-            $row = $query->row();
+        $row = $this->find_user('hostel', $email, $password);
+        if ($row) {
             $this->session->set_userdata(array(
                 'hostel_login'  => 1,
                 'hostel_id'     => $row->hostel_id,

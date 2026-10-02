@@ -13,6 +13,8 @@ if (!defined('BASEPATH'))
 class Admin extends CI_Controller
 {
     public $export_service;
+    public $exam_model;
+    public $portal_model;
 
     /**
      * Weekly timetable — one page showing every teacher's lectures across the week.
@@ -2008,16 +2010,129 @@ class Admin extends CI_Controller
                     'rows'    => $this->db->get('expense_category')->result_array()
                 ];
 
-            case 'banar':
+            /* ---- Exams & CBT (identifier carries ids, e.g. exam_class "3_2") ---- */
+            case 'cbt_exams':
+                $this->load->model('exam_model');
+                $rows = array();
+                foreach ($this->exam_model->cbt_exams() as $e) {
+                    list($o, $c) = sms_cbt_window($e);
+                    $rows[] = array('title' => $e['title'], 'class' => $e['class_name'], 'subject' => $e['subject_name'],
+                        'when' => $o ? date('d M Y h:i A', $o) . ' - ' . date('h:i A', $c) : '', 'duration' => $e['duration'] . ' min',
+                        'questions' => $e['question_count'], 'marks' => sms_num($e['total_marks']),
+                        'submitted' => $e['submitted_count'] . ' / ' . $e['assigned_count'], 'status' => ucfirst(sms_cbt_state($e, time())));
+                }
+                return ['title' => get_phrase('cbt_exams'), 'filename' => 'cbt_exams_' . date('Ymd'), 'rows' => $rows, 'columns' => [
+                    ['label' => get_phrase('exam'), 'key' => 'title'], ['label' => get_phrase('class'), 'key' => 'class'],
+                    ['label' => get_phrase('subject'), 'key' => 'subject'], ['label' => get_phrase('date'), 'key' => 'when'],
+                    ['label' => get_phrase('duration'), 'key' => 'duration'], ['label' => get_phrase('questions'), 'key' => 'questions'],
+                    ['label' => get_phrase('marks'), 'key' => 'marks'], ['label' => get_phrase('submitted'), 'key' => 'submitted'],
+                    ['label' => get_phrase('status'), 'key' => 'status']]];
+
+            case 'cbt_results':
+                $this->load->model('exam_model');
+                $exam = $this->exam_model->cbt_exam((int)$identifier);
+                if (!$exam) return [];
+                $results = $this->exam_model->cbt_results($exam['exam_id']);
+                usort($results, function ($a, $b) { return ($a['rank'] ?: 9999) - ($b['rank'] ?: 9999); });
+                $rows = array();
+                foreach ($results as $r) {
+                    $done = $r['percent'] !== null;
+                    $rows[] = array('rank' => $r['rank'] ?: '-', 'student' => $r['student_name'], 'roll' => $r['roll'],
+                        'score' => $done ? sms_num($r['score']) . ' / ' . sms_num($r['total']) : '-',
+                        'percent' => $done ? number_format($r['percent'], 2) : '-',
+                        'result' => $r['pass'] === null ? ucfirst(str_replace('_', ' ', $r['status'])) : ($r['pass'] ? 'Pass' : 'Fail'));
+                }
+                return ['title' => $exam['title'] . ' - ' . $exam['class_name'] . ' / ' . $exam['subject_name'] . ' (' . date('d M Y', strtotime($exam['exam_date'])) . ')',
+                    'filename' => 'cbt_results_' . $exam['exam_id'] . '_' . date('Ymd'), 'rows' => $rows, 'columns' => [
+                    ['label' => get_phrase('rank'), 'key' => 'rank'], ['label' => get_phrase('student'), 'key' => 'student'],
+                    ['label' => get_phrase('roll'), 'key' => 'roll'], ['label' => get_phrase('score'), 'key' => 'score'],
+                    ['label' => '%', 'key' => 'percent'], ['label' => get_phrase('result'), 'key' => 'result']]];
+
+            case 'written_exams':
+                $this->load->model('exam_model');
+                $classes = array_column($this->db->get('class')->result_array(), 'name', 'class_id');
+                $rows = array();
+                foreach ($this->exam_model->classic_exams() as $e) {
+                    $names = array();
+                    foreach (array_filter(explode(',', (string)$e['class_ids'])) as $cid) if (isset($classes[$cid])) $names[] = $classes[$cid];
+                    $rows[] = array('name' => $e['name'], 'date' => $e['exam_date'] ? date('d M Y', strtotime($e['exam_date'])) : $e['date'],
+                        'classes' => implode(', ', $names), 'total' => $e['total_marks'], 'pass' => $e['pass_percent'] . '%',
+                        'published' => $e['results_published'] ? 'Yes' : 'No', 'comment' => $e['comment']);
+                }
+                return ['title' => get_phrase('written_exams'), 'filename' => 'written_exams_' . date('Ymd'), 'rows' => $rows, 'columns' => [
+                    ['label' => get_phrase('exam'), 'key' => 'name'], ['label' => get_phrase('date'), 'key' => 'date'],
+                    ['label' => get_phrase('classes'), 'key' => 'classes'], ['label' => get_phrase('total_marks'), 'key' => 'total'],
+                    ['label' => get_phrase('pass_percentage'), 'key' => 'pass'], ['label' => get_phrase('results_published'), 'key' => 'published'],
+                    ['label' => get_phrase('comment'), 'key' => 'comment']]];
+
+            case 'marks':
+                $this->load->model('exam_model');
+                list($eid, $cid, $sid) = array_map('intval', array_pad(explode('_', (string)$identifier), 3, 0));
+                $exam = $this->exam_model->classic_exam($eid);
+                $sub = $this->db->get_where('subject', array('subject_id' => $sid))->row();
+                $cls = $this->db->get_where('class', array('class_id' => $cid))->row();
+                if (!$exam || !$sub || !$cls) return [];
+                $rows = array();
+                foreach ($this->exam_model->subject_marks($eid, $cid, $sid) as $s)
+                    $rows[] = array('roll' => $s['roll'], 'student' => $s['name'],
+                        'obtained' => $s['mark']['mark_obtained'] === null ? '' : sms_num($s['mark']['mark_obtained']),
+                        'total' => $s['mark']['mark_total'], 'comment' => $s['mark']['comment']);
+                return ['title' => $exam['name'] . ' - ' . $cls->name . ' - ' . $sub->name, 'filename' => 'marks_' . $eid . '_' . $cid . '_' . $sid,
+                    'rows' => $rows, 'columns' => [
+                    ['label' => get_phrase('roll'), 'key' => 'roll'], ['label' => get_phrase('student'), 'key' => 'student'],
+                    ['label' => get_phrase('marks_obtained'), 'key' => 'obtained'], ['label' => get_phrase('total_marks'), 'key' => 'total'],
+                    ['label' => get_phrase('comment'), 'key' => 'comment']]];
+
+            case 'tabulation':
+                $this->load->model('exam_model');
+                list($eid, $cid) = array_map('intval', array_pad(explode('_', (string)$identifier), 2, 0));
+                $tab = $this->exam_model->tabulation($eid, $cid);
+                $cls = $this->db->get_where('class', array('class_id' => $cid))->row();
+                if (!$tab['exam'] || !$cls) return [];
+                $columns = [['label' => get_phrase('rank'), 'key' => 'rank'], ['label' => get_phrase('student'), 'key' => 'student']];
+                foreach ($tab['subjects'] as $sub) $columns[] = ['label' => $sub['name'], 'key' => 'sub_' . $sub['subject_id']];
+                $columns = array_merge($columns, [['label' => get_phrase('total'), 'key' => 'total'], ['label' => '%', 'key' => 'percent'],
+                    ['label' => get_phrase('grade'), 'key' => 'grade'], ['label' => get_phrase('result'), 'key' => 'result']]);
+                $rows = array();
+                usort($tab['rows'], function ($a, $b) { return ($a['rank'] ?: 9999) - ($b['rank'] ?: 9999); });
+                foreach ($tab['rows'] as $r) {
+                    $row = array('rank' => $r['rank'] ?: '-', 'student' => $r['student']['name'],
+                        'total' => $r['entered'] ? sms_num($r['obtained']) . ' / ' . sms_num($r['total']) : '-',
+                        'percent' => $r['percent'] !== null ? number_format($r['percent'], 2) : '-', 'grade' => $r['grade'] ?: '-',
+                        'result' => $r['pass'] === null ? '-' : ($r['pass'] ? 'Pass' : 'Fail'));
+                    foreach ($tab['subjects'] as $sub) {
+                        $c = $r['cells'][$sub['subject_id']];
+                        $row['sub_' . $sub['subject_id']] = $c ? sms_num($c['obtained']) . ' / ' . sms_num($c['total']) : '-';
+                    }
+                    $rows[] = $row;
+                }
+                return ['title' => get_phrase('tabulation_sheet') . ': ' . $tab['exam']['name'] . ' - ' . $cls->name,
+                    'filename' => 'tabulation_' . $eid . '_' . $cid, 'columns' => $columns, 'rows' => $rows];
+
+            case 'grades':
+                $rows = $this->db->order_by('mark_from', 'DESC')->get('grade')->result_array();
+                return ['title' => get_phrase('manage_grade'), 'filename' => 'grades_' . date('Ymd'), 'rows' => $rows, 'columns' => [
+                    ['label' => get_phrase('grade_name'), 'key' => 'name'], ['label' => get_phrase('grade_point'), 'key' => 'grade_point'],
+                    ['label' => get_phrase('mark_from') . ' (%)', 'key' => 'mark_from'], ['label' => get_phrase('mark_upto') . ' (%)', 'key' => 'mark_upto'],
+                    ['label' => get_phrase('comment'), 'key' => 'comment']]];
+
+            case 'email_log':
+                $rows = $this->db->select('created_at, to_email, subject, event, status, error')->order_by('log_id', 'DESC')->limit(1000)->get('email_log')->result_array();
+                return ['title' => get_phrase('email_log'), 'filename' => 'email_log_' . date('Ymd'), 'rows' => $rows, 'columns' => [
+                    ['label' => get_phrase('date'), 'key' => 'created_at'], ['label' => get_phrase('to'), 'key' => 'to_email'],
+                    ['label' => get_phrase('subject'), 'key' => 'subject'], ['label' => get_phrase('type'), 'key' => 'event'],
+                    ['label' => get_phrase('status'), 'key' => 'status'], ['label' => get_phrase('error'), 'key' => 'error']]];
+
+            case 'banner':
                 return [
-                    'title'   => get_phrase('bannar_information_page'),
+                    'title'   => get_phrase('banner_information_page'),
                     'filename'=> 'banners_' . date('Ymd'),
                     'columns' => [
-                        ['label' => 'Banner ID', 'key' => 'banar_id'],
+                        ['label' => 'Banner ID', 'key' => 'banner_id'],
                         ['label' => get_phrase('b_text_one'), 'key' => 'b_namea'],
                         ['label' => get_phrase('b_text_two'), 'key' => 'b_nameb']
                     ],
-                    'rows'    => $this->db->get('banar')->result_array()
+                    'rows'    => $this->db->get('banner')->result_array()
                 ];
 
             case 'student_payment':
@@ -2993,7 +3108,7 @@ public function handleStudentFiles($student_id)
 	
 	
 	/****MANAGE BANNER *****/
-    function banar($param1 = '', $param2 = '', $param3 = '')
+    function banner($param1 = '', $param2 = '', $param3 = '')
     {
         if ($this->session->userdata('admin_login') != 1)
             redirect(base_url(), 'refresh');
@@ -3001,38 +3116,38 @@ public function handleStudentFiles($student_id)
             $data['b_namea']        = $this->input->post('b_namea');
             $data['b_nameb']    = $this->input->post('b_nameb');
 			
-            $this->db->insert('banar', $data);
-            $banar_id = $this->db->insert_id();
-            move_uploaded_file($_FILES['userfile']['tmp_name'], 'uploads/banner_image/' . $banar_id . '.jpg');
+            $this->db->insert('banner', $data);
+            $banner_id = $this->db->insert_id();
+            move_uploaded_file($_FILES['userfile']['tmp_name'], 'uploads/banner_image/' . $banner_id . '.jpg');
             $this->session->set_flashdata('flash_message' , get_phrase('data_added_successfully'));
-            redirect(base_url() . 'index.php?admin/banar', 'refresh');
+            redirect(base_url() . 'index.php?admin/banner', 'refresh');
         }
         if ($param1 == 'do_update') {
              $data['b_namea']        = $this->input->post('b_namea');
             $data['b_nameb']    = $this->input->post('b_nameb');
             
-            $this->db->where('banar_id', $param2);
-            $this->db->update('banar', $data);
+            $this->db->where('banner_id', $param2);
+            $this->db->update('banner', $data);
             move_uploaded_file($_FILES['userfile']['tmp_name'], 'uploads/banner_image/' . $param2 . '.jpg');
             $this->session->set_flashdata('flash_message' , get_phrase('data_updated'));
-            redirect(base_url() . 'index.php?admin/banar', 'refresh');
+            redirect(base_url() . 'index.php?admin/banner', 'refresh');
         } else if ($param1 == 'personal_profile') {
             $page_data['personal_profile']   = true;
-            $page_data['current_banar_id'] = $param2;
+            $page_data['current_banner_id'] = $param2;
         } else if ($param1 == 'edit') {
-            $page_data['edit_data'] = $this->db->get_where('banar', array(
-                'banar_id' => $param2
+            $page_data['edit_data'] = $this->db->get_where('banner', array(
+                'banner_id' => $param2
             ))->result_array();
         }
         if ($param1 == 'delete') {
-            $this->db->where('banar_id', $param2);
-            $this->db->delete('banar');
+            $this->db->where('banner_id', $param2);
+            $this->db->delete('banner');
             $this->session->set_flashdata('flash_message' , get_phrase('data_deleted'));
-            redirect(base_url() . 'index.php?admin/banar', 'refresh');
+            redirect(base_url() . 'index.php?admin/banner', 'refresh');
         }
-        $page_data['banars']   = $this->db->get('banar')->result_array();
-        $page_data['page_name']  = 'banar';
-        $page_data['page_title'] = get_phrase('manage_banar');
+        $page_data['banners']   = $this->db->get('banner')->result_array();
+        $page_data['page_name']  = 'banner';
+        $page_data['page_title'] = get_phrase('manage_banner');
         $this->load->view('backend/index', $page_data);
     }
 	
@@ -4304,43 +4419,67 @@ public function handleStudentFiles($student_id)
 	
 
     /****MANAGE EXAMS*****/
-    function exam($param1 = '', $param2 = '' , $param3 = '')
+    /****MANAGE WRITTEN (CLASSIC) EXAMS*****/
+    function exam($param1 = '', $param2 = '', $param3 = '')
     {
-        if ($this->session->userdata('admin_login') != 1)
-            redirect(base_url(), 'refresh');
-        if ($param1 == 'create') {
-            $data['name']    = $this->input->post('name');
-            $data['date']    = $this->input->post('date');
-            $data['comment'] = $this->input->post('comment');
-            $this->db->insert('exam', $data);
-            $this->session->set_flashdata('flash_message' , get_phrase('data_added_successfully'));
-            redirect(base_url() . 'index.php?admin/exam/', 'refresh');
+        $this->cbt_guard();
+        $form = function () {
+            $classes = array_values(array_filter(array_map('intval', (array)$this->input->post('class_ids'))));
+            return array(
+                'name'         => trim((string)$this->input->post('name')),
+                'exam_date'    => sms_parse_exam_date($this->input->post('exam_date')),
+                'total_marks'  => (int)$this->input->post('total_marks'),
+                'pass_percent' => min(100, max(0, (int)$this->input->post('pass_percent'))),
+                'class_ids'    => implode(',', $classes),
+                'comment'      => trim((string)$this->input->post('comment')),
+            );
+        };
+        $invalid = function ($d) {
+            if ($d['name'] === '')       return get_phrase('exam_name_is_required');
+            if ($d['exam_date'] === '')  return get_phrase('exam_date_is_required');
+            if ($d['total_marks'] < 1)   return get_phrase('total_marks_must_be_more_than_0');
+            if ($d['class_ids'] === '')  return get_phrase('select_at_least_one_class');
+            return null;
+        };
+        if ($param1 == 'create' || ($param1 == 'edit' && $param2 == 'do_update')) {
+            $d = $form();
+            if ($e = $invalid($d)) $this->cbt_back('exam', $e, true);
+            $d['date'] = date('m/d/Y', strtotime($d['exam_date']));   // legacy text column used by older screens
+            if ($param1 == 'create') {
+                $this->db->insert('exam', $d);
+                $id = $this->db->insert_id();
+                $msg = get_phrase('data_added_successfully') . '.';
+                if ($this->input->post('notify')) {
+                    $this->load->model('email_model');
+                    $msg .= $this->email_summary($this->email_model->notify_classic_scheduled($id, explode(',', $d['class_ids'])));
+                }
+                $this->cbt_back('exam', $msg);
+            }
+            $this->db->where('exam_id', (int)$param3)->update('exam', $d);
+            $this->cbt_back('exam', get_phrase('data_updated'));
         }
-        if ($param1 == 'edit' && $param2 == 'do_update') {
-            $data['name']    = $this->input->post('name');
-            $data['date']    = $this->input->post('date');
-            $data['comment'] = $this->input->post('comment');
-            
-            $this->db->where('exam_id', $param3);
-            $this->db->update('exam', $data);
-            $this->session->set_flashdata('flash_message' , get_phrase('data_updated'));
-            redirect(base_url() . 'index.php?admin/exam/', 'refresh');
-        } else if ($param1 == 'edit') {
-            $page_data['edit_data'] = $this->db->get_where('exam', array(
-                'exam_id' => $param2
-            ))->result_array();
+        if ($param1 == 'notify') {
+            $exam = $this->exam_model->classic_exam($param2);
+            if (!$exam) $this->cbt_back('exam', get_phrase('exam_not_found'), true);
+            $this->load->model('email_model');
+            $counts = $this->email_model->notify_classic_scheduled($param2, array_filter(explode(',', $exam['class_ids'])));
+            $this->cbt_back('exam', get_phrase('exam_schedule_emailed') . '.' . $this->email_summary($counts));
         }
         if ($param1 == 'delete') {
-            $this->db->where('exam_id', $param2);
-            $this->db->delete('exam');
-            $this->session->set_flashdata('flash_message' , get_phrase('data_deleted'));
-            redirect(base_url() . 'index.php?admin/exam/', 'refresh');
+            if ($this->db->where('exam_id', (int)$param2)->where('mark_obtained IS NOT NULL', null, false)->count_all_results('mark') > 0)
+                $this->cbt_back('exam', get_phrase('exam_has_marks_and_cannot_be_deleted'), true);
+            $this->db->where('exam_id', (int)$param2)->delete('mark');
+            $this->db->where('exam_id', (int)$param2)->delete('exam');
+            $this->cbt_back('exam', get_phrase('data_deleted'));
         }
-        $page_data['exams']      = $this->db->get('exam')->result_array();
+        $page_data['edit']       = $param1 == 'edit' ? $this->exam_model->classic_exam($param2) : null;
+        $page_data['exams']      = $this->exam_model->classic_exams();
+        $page_data['classes']    = $this->db->order_by('name', 'ASC')->get('class')->result_array();
         $page_data['page_name']  = 'exam';
-        $page_data['page_title'] = get_phrase('manage_exam');
+        $page_data['page_title'] = get_phrase('written_exams');
         $this->load->view('backend/index', $page_data);
     }
+
 	
 	/****MANAGE NEWS*****/
     function news($param1 = '', $param2 = '' , $param3 = '')
@@ -4580,8 +4719,8 @@ public function handleStudentFiles($student_id)
             $this->db->where('type' , 'about_us');
             $this->db->update('front_end' , $data);
 
-            $data['description'] = $this->input->post('vission');
-            $this->db->where('type' , 'vission');
+            $data['description'] = $this->input->post('vision');
+            $this->db->where('type' , 'vision');
             $this->db->update('front_end' , $data);
 
             $data['description'] = $this->input->post('mission');
@@ -4621,102 +4760,138 @@ public function handleStudentFiles($student_id)
     }
 
     /****MANAGE EXAM MARKS*****/
+    /****MANAGE EXAM MARKS (written exams)*****/
     function marks($exam_id = '', $class_id = '', $subject_id = '')
     {
-        if ($this->session->userdata('admin_login') != 1)
-            redirect(base_url(), 'refresh');
-        
+        $this->cbt_guard();
         if ($this->input->post('operation') == 'selection') {
-            $page_data['exam_id']    = $this->input->post('exam_id');
-            $page_data['class_id']   = $this->input->post('class_id');
-            $page_data['subject_id'] = $this->input->post('subject_id');
-            
-            if ($page_data['exam_id'] > 0 && $page_data['class_id'] > 0 && $page_data['subject_id'] > 0) {
-                redirect(base_url() . 'index.php?admin/marks/' . $page_data['exam_id'] . '/' . $page_data['class_id'] . '/' . $page_data['subject_id'], 'refresh');
-            } else {
-                $this->session->set_flashdata('mark_message', 'Choose exam, class and subject');
-                redirect(base_url() . 'index.php?admin/marks/', 'refresh');
-            }
+            $e = (int)$this->input->post('exam_id'); $c = (int)$this->input->post('class_id'); $s = (int)$this->input->post('subject_id');
+            if (!$e || !$c || !$s) $this->cbt_back('marks', get_phrase('choose_exam_class_and_subject'), true);
+            redirect(base_url() . 'index.php?admin/marks/' . $e . '/' . $c . '/' . $s, 'refresh');
         }
+        $here = 'marks/' . (int)$exam_id . '/' . (int)$class_id . '/' . (int)$subject_id;
         if ($this->input->post('operation') == 'update') {
-            $students = $this->db->get_where('student' , array('class_id' => $class_id))->result_array();
-            foreach($students as $row) {
-                $data['mark_obtained'] = $this->input->post('mark_obtained_' . $row['student_id']);
-                $data['comment']       = $this->input->post('comment_' . $row['student_id']);
-                
-                $this->db->where('mark_id', $this->input->post('mark_id_' . $row['student_id']));
-                $this->db->update('mark', array('mark_obtained' => $data['mark_obtained'] , 'comment' => $data['comment']));
+            $obtained = (array)$this->input->post('mark_obtained');
+            $totals   = (array)$this->input->post('mark_total');
+            $comments = (array)$this->input->post('comment');
+            $errors = array(); $saved = 0;
+            foreach ($obtained as $mark_id => $value) {
+                $m = $this->db->get_where('mark', array('mark_id' => (int)$mark_id, 'exam_id' => (int)$exam_id, 'subject_id' => (int)$subject_id))->row();
+                if (!$m) continue;
+                $value = trim((string)$value);
+                $total = isset($totals[$mark_id]) ? (int)$totals[$mark_id] : (int)$m->mark_total;
+                // Validation rules live in sms_exam_helper (unit tested).
+                if ($err = sms_mark_error($value, $total)) {
+                    $st = $this->db->get_where('student', array('student_id' => $m->student_id))->row();
+                    $errors[] = ($st ? $st->name : '#' . $m->student_id) . ': ' . get_phrase($err);
+                    continue;
+                }
+                $this->db->where('mark_id', (int)$mark_id)->update('mark', array(
+                    'mark_obtained' => $value === '' ? null : $value, 'mark_total' => $total,
+                    'comment' => trim((string)($comments[$mark_id] ?? '')),
+                ));
+                $saved++;
             }
-            $this->session->set_flashdata('flash_message' , get_phrase('data_updated'));
-            redirect(base_url() . 'index.php?admin/marks/' . $this->input->post('exam_id') . '/' . $this->input->post('class_id') . '/' . $this->input->post('subject_id'), 'refresh');
+            if ($errors) {
+                $this->session->set_flashdata('mark_errors', $errors);
+                $this->cbt_back($here, $saved . ' ' . get_phrase('saved') . ', ' . count($errors) . ' ' . get_phrase('need_correction'), true);
+            }
+            $this->cbt_back($here, get_phrase('marks_saved') . ' (' . $saved . ')');
         }
-        $page_data['exam_id']    = $exam_id;
-        $page_data['class_id']   = $class_id;
-        $page_data['subject_id'] = $subject_id;
-        
-        $page_data['page_info'] = 'Exam marks';
-        
+        if ($exam_id && $class_id && $subject_id) {
+            $page_data['exam']     = $this->exam_model->classic_exam($exam_id);
+            $page_data['subject']  = $this->db->get_where('subject', array('subject_id' => (int)$subject_id, 'class_id' => (int)$class_id))->row_array();
+            if (!$page_data['exam'] || !$page_data['subject']) $this->cbt_back('marks', get_phrase('choose_exam_class_and_subject'), true);
+            $page_data['students'] = $this->exam_model->subject_marks($exam_id, $class_id, $subject_id);
+            $page_data['errors']   = (array)$this->session->flashdata('mark_errors');
+        }
+        $page_data['exam_id']    = (int)$exam_id;
+        $page_data['class_id']   = (int)$class_id;
+        $page_data['subject_id'] = (int)$subject_id;
+        $page_data['exams']      = $this->exam_model->classic_exams();
+        $page_data['classes']    = $this->db->order_by('name', 'ASC')->get('class')->result_array();
+        $page_data['subjects']   = $this->db->order_by('name', 'ASC')->get('subject')->result_array();
         $page_data['page_name']  = 'marks';
         $page_data['page_title'] = get_phrase('manage_exam_marks');
         $this->load->view('backend/index', $page_data);
     }
 
+
     // TABULATION SHEET
-    function tabulation_sheet($class_id = '' , $exam_id = '') {
-        if ($this->session->userdata('admin_login') != 1)
-            redirect(base_url(), 'refresh');
-       
-       
+    // TABULATION SHEET (written exams): class result grid, rank, publish & email results
+    function tabulation_sheet($exam_id = '', $class_id = '', $action = '')
+    {
+        $this->cbt_guard();
+        if ($this->input->post('operation') == 'selection') {
+            $e = (int)$this->input->post('exam_id'); $c = (int)$this->input->post('class_id');
+            if (!$e || !$c) $this->cbt_back('tabulation_sheet', get_phrase('choose_exam_and_class'), true);
+            redirect(base_url() . 'index.php?admin/tabulation_sheet/' . $e . '/' . $c, 'refresh');
+        }
+        if ($exam_id && $class_id) {
+            $tab = $this->exam_model->tabulation($exam_id, $class_id);
+            if (!$tab['exam']) $this->cbt_back('tabulation_sheet', get_phrase('exam_not_found'), true);
+            $here = 'tabulation_sheet/' . (int)$exam_id . '/' . (int)$class_id;
+            if ($action == 'publish') {
+                $entered = array_filter($tab['rows'], function ($r) { return $r['percent'] !== null; });
+                if (!$entered) $this->cbt_back($here, get_phrase('no_marks_entered_yet'), true);
+                $this->db->where('exam_id', (int)$exam_id)->update('exam', array('results_published' => 1, 'results_published_at' => time()));
+                $this->load->model('email_model');
+                $counts = $this->email_model->notify_classic_results($exam_id, $class_id);
+                $this->cbt_back($here, get_phrase('results_published') . '.' . $this->email_summary($counts));
+            }
+            $page_data['tab']   = $tab;
+            $page_data['class'] = $this->db->get_where('class', array('class_id' => (int)$class_id))->row_array();
+        }
+        $page_data['exam_id']    = (int)$exam_id;
+        $page_data['class_id']   = (int)$class_id;
+        $page_data['exams']      = $this->exam_model->classic_exams();
+        $page_data['classes']    = $this->db->order_by('name', 'ASC')->get('class')->result_array();
         $page_data['page_name']  = 'tabulation_sheet';
         $page_data['page_title'] = get_phrase('tabulation_sheet');
         $this->load->view('backend/index', $page_data);
-    
     }
+
 
     
     
     /****MANAGE GRADES*****/
+    /****MANAGE GRADES (percentage bands)*****/
     function grade($param1 = '', $param2 = '')
     {
-        if ($this->session->userdata('admin_login') != 1)
-            redirect(base_url(), 'refresh');
-        if ($param1 == 'create') {
-            $data['name']        = $this->input->post('name');
-            $data['grade_point'] = $this->input->post('grade_point');
-            $data['mark_from']   = $this->input->post('mark_from');
-            $data['mark_upto']   = $this->input->post('mark_upto');
-            $data['comment']     = $this->input->post('comment');
-            $this->db->insert('grade', $data);
-            $this->session->set_flashdata('flash_message' , get_phrase('data_added_successfully'));
-            redirect(base_url() . 'index.php?admin/grade/', 'refresh');
+        $this->cbt_guard();
+        $existing = $this->db->get('grade')->result_array();
+        if ($param1 == 'create' || $param1 == 'do_update') {
+            $data = array(
+                'name'        => trim((string)$this->input->post('name')),
+                'grade_point' => trim((string)$this->input->post('grade_point')),
+                'mark_from'   => $this->input->post('mark_from'),
+                'mark_upto'   => $this->input->post('mark_upto'),
+                'comment'     => trim((string)$this->input->post('comment')),
+            );
+            // Range / overlap rules live in sms_exam_helper (unit tested).
+            $error = sms_grade_error($data['name'], $data['mark_from'], $data['mark_upto'], $existing, $param1 == 'do_update' ? (int)$param2 : 0);
+            if ($error) $this->cbt_back('grade' . ($param1 == 'do_update' ? '/edit/' . (int)$param2 : ''), get_phrase($error), true);
+            if ($param1 == 'create') $this->db->insert('grade', $data);
+            else $this->db->where('grade_id', (int)$param2)->update('grade', $data);
+            $this->cbt_back('grade', get_phrase($param1 == 'create' ? 'data_added_successfully' : 'data_updated'));
         }
-        if ($param1 == 'do_update') {
-            $data['name']        = $this->input->post('name');
-            $data['grade_point'] = $this->input->post('grade_point');
-            $data['mark_from']   = $this->input->post('mark_from');
-            $data['mark_upto']   = $this->input->post('mark_upto');
-            $data['comment']     = $this->input->post('comment');
-            
-            $this->db->where('grade_id', $param2);
-            $this->db->update('grade', $data);
-            $this->session->set_flashdata('flash_message' , get_phrase('data_updated'));
-            redirect(base_url() . 'index.php?admin/grade/', 'refresh');
-        } else if ($param1 == 'edit') {
-            $page_data['edit_data'] = $this->db->get_where('grade', array(
-                'grade_id' => $param2
-            ))->result_array();
+        if ($param1 == 'load_defaults') {
+            if ($existing) $this->cbt_back('grade', get_phrase('delete_existing_grades_first'), true);
+            foreach (sms_default_grades() as $g) $this->db->insert('grade', $g);
+            $this->cbt_back('grade', get_phrase('default_grades_added'));
         }
         if ($param1 == 'delete') {
-            $this->db->where('grade_id', $param2);
-            $this->db->delete('grade');
-            $this->session->set_flashdata('flash_message' , get_phrase('data_deleted'));
-            redirect(base_url() . 'index.php?admin/grade/', 'refresh');
+            $this->db->where('grade_id', (int)$param2)->delete('grade');
+            $this->cbt_back('grade', get_phrase('data_deleted'));
         }
-        $page_data['grades']     = $this->db->get('grade')->result_array();
+        usort($existing, function ($a, $b) { return (int)$b['mark_from'] - (int)$a['mark_from']; });
+        $page_data['edit']       = $param1 == 'edit' ? $this->db->get_where('grade', array('grade_id' => (int)$param2))->row_array() : null;
+        $page_data['grades']     = $existing;
         $page_data['page_name']  = 'grade';
         $page_data['page_title'] = get_phrase('manage_grade');
         $this->load->view('backend/index', $page_data);
     }
+
     
     /**********MANAGING CLASS ROUTINE******************/
     function class_routine($param1 = '', $param2 = '', $param3 = '')
@@ -5565,9 +5740,11 @@ public function handleStudentFiles($student_id)
             $this->db->where('type' , 'system_name');
             $this->db->update('settings' , $data);
 
-            $data['description'] = $this->input->post('language');
-            $this->db->where('type' , 'language');
-            $this->db->update('settings' , $data);
+            if (sms_is_language($this->input->post('language'), $this->db->list_fields('language'))) {
+                $data['description'] = $this->input->post('language');
+                $this->db->where('type' , 'language');
+                $this->db->update('settings' , $data);
+            }
 
             $data['description'] = $this->input->post('text_align');
             $this->db->where('type' , 'text_align');
@@ -5603,7 +5780,8 @@ public function handleStudentFiles($student_id)
     }
 	
 	/***** UPDATE PRODUCT *****/
-	
+	// Disabled: vendor updater not used (would overwrite custom code / run uploaded PHP).
+	/*
 	function update( $task = '', $purchase_code = '' ) {
         
         if ($this->session->userdata('admin_login') != 1)
@@ -5654,6 +5832,7 @@ public function handleStudentFiles($student_id)
         $this->session->set_flashdata('flash_message' , get_phrase('product_updated_successfully'));
         redirect(base_url() . 'index.php?admin/system_settings');
     }
+	*/
 
     /*****SMS SETTINGS*********/
     function sms_settings($param1 = '' , $param2 = '')
@@ -5733,64 +5912,115 @@ public function handleStudentFiles($student_id)
     }
     
     /*****LANGUAGE SETTINGS*********/
-    function manage_language($param1 = '', $param2 = '', $param3 = '')
+    function manage_language($param1 = '', $param2 = '', $param3 = '', $param4 = '', $param5 = '')
     {
         if ($this->session->userdata('admin_login') != 1)
 			redirect(base_url() . 'index.php?login', 'refresh');
-		
-		if ($param1 == 'edit_phrase') {
-			$page_data['edit_profile'] 	= $param2;	
+
+		$base      = base_url() . 'index.php?admin/manage_language/';
+		$fields    = $this->db->list_fields('language');
+		$languages = sms_language_columns($fields);
+		$setting   = $this->db->get_where('settings', array('type' => 'language'))->row();
+		$current   = $setting ? $setting->description : 'english';
+		// Language / delete / add rules live in sms_core_helper (unit tested).
+		$fail = function ($phrase, $to = '') use ($base) {
+			$this->session->set_flashdata('error_message', get_phrase($phrase));
+			redirect($base . $to, 'refresh');
+		};
+
+		// Phrase editor URL: edit_phrase/<lang>/<all|missing>/<page>/<hex search>
+		$editor_url = function ($lang, $filter, $page, $search) use ($base) {
+			return $base . 'edit_phrase/' . $lang . '/' . $filter . '/' . (int)$page . ($search !== '' ? '/' . bin2hex($search) : '');
+		};
+
+		if ($param1 == 'search_phrase') {
+			if (!sms_is_language($param2, $fields)) $fail('language_not_found');
+			$filter = $this->input->post('filter') === 'missing' ? 'missing' : 'all';
+			redirect($editor_url($param2, $filter, 1, trim((string)$this->input->post('q'))), 'refresh');
 		}
 		if ($param1 == 'update_phrase') {
-			$language	=	$param2;
-			$total_phrase	=	$this->input->post('total_phrase');
-			for($i = 1 ; $i < $total_phrase ; $i++)
-			{
-				//$data[$language]	=	$this->input->post('phrase').$i;
-				$this->db->where('phrase_id' , $i);
-				$this->db->update('language' , array($language => $this->input->post('phrase'.$i)));
+			if (!sms_is_language($param2, $fields)) $fail('language_not_found');
+			// Only the phrases shown on the submitted page are posted (one page, not all rows).
+			$updated = 0;
+			foreach ((array)$this->input->post('phrase') as $id => $text) {
+				$this->db->where('phrase_id', (int)$id)->update('language', array($param2 => trim((string)$text)));
+				$updated += $this->db->affected_rows();
 			}
-			redirect(base_url() . 'index.php?admin/manage_language/edit_phrase/'.$language, 'refresh');
-		}
-		if ($param1 == 'do_update') {
-			$language        = $this->input->post('language');
-			$data[$language] = $this->input->post('phrase');
-			$this->db->where('phrase_id', $param2);
-			$this->db->update('language', $data);
-			$this->session->set_flashdata('flash_message', get_phrase('settings_updated'));
-			redirect(base_url() . 'index.php?admin/manage_language/', 'refresh');
+			$this->session->set_flashdata('flash_message', get_phrase('phrases_updated') . ': ' . $updated);
+			redirect($editor_url($param2, $this->input->post('filter') === 'missing' ? 'missing' : 'all',
+				$this->input->post('page'), (string)$this->input->post('q')), 'refresh');
 		}
 		if ($param1 == 'add_phrase') {
-			$data['phrase'] = $this->input->post('phrase');
-			$this->db->insert('language', $data);
-			$this->session->set_flashdata('flash_message', get_phrase('settings_updated'));
-			redirect(base_url() . 'index.php?admin/manage_language/', 'refresh');
+			$phrase = strtolower(preg_replace('/\s+/', '_', trim((string)$this->input->post('phrase'))));
+			if ($phrase === '') $fail('phrase_is_required');
+			$this->db->query('INSERT IGNORE INTO `language` (`phrase`, `english`) VALUES (' .
+				$this->db->escape($phrase) . ', ' . $this->db->escape(sms_humanize_phrase($phrase)) . ')');
+			$this->session->set_flashdata('flash_message', get_phrase($this->db->affected_rows() ? 'phrase_added' : 'phrase_already_exists'));
+			redirect($base, 'refresh');
 		}
 		if ($param1 == 'add_language') {
-			$language = $this->input->post('language');
-			$this->load->dbforge();
-			$fields = array(
-				$language => array(
-					'type' => 'LONGTEXT'
-				)
-			);
-			$this->dbforge->add_column('language', $fields);
-			
-			$this->session->set_flashdata('flash_message', get_phrase('settings_updated'));
-			redirect(base_url() . 'index.php?admin/manage_language/', 'refresh');
+			$error = sms_language_add_error($this->input->post('language'), $fields);
+			if ($error !== null) $fail($error);
+			$language = strtolower(trim($this->input->post('language')));
+			$this->db->query("ALTER TABLE `language` ADD COLUMN `$language` LONGTEXT NOT NULL DEFAULT ''");
+			$this->session->set_flashdata('flash_message', get_phrase('language_added'));
+			redirect($base, 'refresh');
 		}
 		if ($param1 == 'delete_language') {
-			$language = $param2;
+			if ($this->input->method() !== 'post') redirect($base, 'refresh');
+			$error = sms_language_delete_error($param2, $current, $fields);
+			if ($error !== null) $fail($error);
 			$this->load->dbforge();
-			$this->dbforge->drop_column('language', $language);
-			$this->session->set_flashdata('flash_message', get_phrase('settings_updated'));
-			
-			redirect(base_url() . 'index.php?admin/manage_language/', 'refresh');
+			$this->dbforge->drop_column('language', $param2);
+			$this->session->set_flashdata('flash_message', get_phrase('language_deleted'));
+			redirect($base, 'refresh');
 		}
+
+		if ($param1 == 'edit_phrase') {
+			if (!sms_is_language($param2, $fields)) $fail('language_not_found');
+			$filter = $param3 === 'missing' ? 'missing' : 'all';
+			$search = (ctype_xdigit((string)$param5) && strlen($param5) % 2 === 0) ? (string)hex2bin($param5) : '';
+
+			$apply = function () use ($param2, $filter, $search) {
+				if ($filter === 'missing') $this->db->where($param2, '');
+				if ($search !== '') {
+					$this->db->group_start()
+						->like('phrase', $search)->or_like('english', $search)->or_like($param2, $search)
+						->group_end();
+				}
+			};
+			$apply();
+			$total = $this->db->count_all_results('language');
+			$per_page = 50;
+			list($page, $offset, $pages) = sms_page_bounds($param4 === '' ? 1 : $param4, $per_page, $total);
+			$apply();
+			$page_data['phrases'] = $this->db->select('phrase_id, phrase, english, ' . $this->db->protect_identifiers($param2) . ' AS translation', FALSE)
+				->order_by('english', 'ASC')->limit($per_page, $offset)->get('language')->result_array();
+
+			$page_data['edit_language'] = $param2;
+			$page_data['filter']        = $filter;
+			$page_data['search']        = $search;
+			$page_data['page']          = $page;
+			$page_data['pages']         = $pages;
+			$page_data['total']         = $total;
+			$page_data['editor_url']    = $editor_url;
+		}
+
+		// Per-language progress for the list
+		$counts = array();
+		$total_phrases = $this->db->count_all('language');
+		if ($languages) {
+			$sums = array();
+			foreach ($languages as $l) $sums[] = 'SUM(' . $this->db->protect_identifiers($l) . " <> '') AS " . $this->db->protect_identifiers($l);
+			$counts = $this->db->query('SELECT ' . implode(', ', $sums) . ' FROM `language`')->row_array();
+		}
+		$page_data['languages']        = $languages;
+		$page_data['current_language'] = $current;
+		$page_data['translated']       = $counts;
+		$page_data['total_phrases']    = $total_phrases;
 		$page_data['page_name']        = 'manage_language';
 		$page_data['page_title']       = get_phrase('manage_language');
-		//$page_data['language_phrases'] = $this->db->get('language')->result_array();
-		$this->load->view('backend/index', $page_data);	
+		$this->load->view('backend/index', $page_data);
     }
     
     /*****BACKUP / RESTORE / DELETE DATA PAGE**********/
@@ -5827,32 +6057,47 @@ public function handleStudentFiles($student_id)
     {
         if ($this->session->userdata('admin_login') != 1)
             redirect(base_url() . 'index.php?login', 'refresh');
+        $admin_id = $this->session->userdata('admin_id');
         if ($param1 == 'update_profile_info') {
-            $data['name']  = $this->input->post('name');
-            $data['email'] = $this->input->post('email');
-            
-            $this->db->where('admin_id', $this->session->userdata('admin_id'));
+            $data['name']  = trim((string)$this->input->post('name'));
+            $data['email'] = trim((string)$this->input->post('email'));
+            $photo         = isset($_FILES['userfile']) ? $_FILES['userfile'] : null;
+
+            $email_taken = $this->db->where('email', $data['email'])
+                                    ->where('admin_id !=', $admin_id)
+                                    ->count_all_results('admin') > 0;
+            // Validation rules live in sms_core_helper (unit tested).
+            $error = sms_profile_error($data['name'], $data['email'], $email_taken);
+            if ($error === null) $error = sms_upload_image_error($photo);
+            if ($error !== null) {
+                $this->session->set_flashdata('error_message', get_phrase($error));
+                redirect(base_url() . 'index.php?admin/manage_profile/', 'refresh');
+            }
+
+            $this->db->where('admin_id', $admin_id);
             $this->db->update('admin', $data);
-            move_uploaded_file($_FILES['userfile']['tmp_name'], 'uploads/admin_image/' . $this->session->userdata('admin_id') . '.jpg');
+            $this->session->set_userdata('name', $data['name']);
+            if ($photo && $photo['error'] === UPLOAD_ERR_OK) {
+                move_uploaded_file($photo['tmp_name'], 'uploads/admin_image/' . $admin_id . '.jpg');
+            }
             $this->session->set_flashdata('flash_message', get_phrase('account_updated'));
             redirect(base_url() . 'index.php?admin/manage_profile/', 'refresh');
         }
         if ($param1 == 'change_password') {
-            $data['password']             = $this->input->post('password');
-            $data['new_password']         = $this->input->post('new_password');
-            $data['confirm_new_password'] = $this->input->post('confirm_new_password');
-            
             $current_password = $this->db->get_where('admin', array(
-                'admin_id' => $this->session->userdata('admin_id')
+                'admin_id' => $admin_id
             ))->row()->password;
-            if ($current_password == $data['password'] && $data['new_password'] == $data['confirm_new_password']) {
-                $this->db->where('admin_id', $this->session->userdata('admin_id'));
+            // Validation rules live in sms_core_helper (unit tested).
+            $error = sms_password_change_error($current_password, $this->input->post('password'),
+                $this->input->post('new_password'), $this->input->post('confirm_new_password'));
+            if ($error === null) {
+                $this->db->where('admin_id', $admin_id);
                 $this->db->update('admin', array(
-                    'password' => $data['new_password']
+                    'password' => $this->input->post('new_password')
                 ));
                 $this->session->set_flashdata('flash_message', get_phrase('password_updated'));
             } else {
-                $this->session->set_flashdata('flash_message', get_phrase('password_mismatch'));
+                $this->session->set_flashdata('error_message', get_phrase($error));
             }
             redirect(base_url() . 'index.php?admin/manage_profile/', 'refresh');
         }
@@ -5866,538 +6111,414 @@ public function handleStudentFiles($student_id)
 	
 	
 // CBT CUSTOMISATION STARTS FROM HERE
+// Exams are rows of `cbt_exam`; questions, assignments and answers link to it by exam_id.
+// Rules (marking, timing, ranking, publish checks) live in sms_exam_helper (unit tested).
 
-    /**
-     * Ensure CBT schema additions exist.
-     *  - question.marks                (per-question marks)
-     *  - exam_result.marks_awarded     (admin awarded marks during paper checking)
-     *  - exam_result.status            (pending / checked)
-     *  - exam_result.submitted_at      (timestamp)
-     *  - exam_assignment               (new table linking student <-> exam)
-     */
-    private function ensure_cbt_schema()
+    private function cbt_guard()
     {
-        if ($this->db->table_exists('question') && !$this->db->field_exists('marks', 'question')) {
-            $this->db->query("ALTER TABLE `question` ADD `marks` INT NOT NULL DEFAULT 1");
-        }
-        if ($this->db->table_exists('exam_result')) {
-            if (!$this->db->field_exists('marks_awarded', 'exam_result')) {
-                $this->db->query("ALTER TABLE `exam_result` ADD `marks_awarded` DECIMAL(10,2) NULL");
-            }
-            if (!$this->db->field_exists('status', 'exam_result')) {
-                $this->db->query("ALTER TABLE `exam_result` ADD `status` VARCHAR(20) DEFAULT 'submitted'");
-            }
-            if (!$this->db->field_exists('submitted_at', 'exam_result')) {
-                $this->db->query("ALTER TABLE `exam_result` ADD `submitted_at` INT NULL");
-            }
-        }
-        if (!$this->db->table_exists('exam_assignment')) {
-            $this->db->query("
-                CREATE TABLE IF NOT EXISTS `exam_assignment` (
-                    `assignment_id` int(11) NOT NULL AUTO_INCREMENT,
-                    `class_id` int(11) NOT NULL,
-                    `subject_id` int(11) NOT NULL,
-                    `date` date NOT NULL,
-                    `duration` int(11) NOT NULL,
-                    `session` varchar(255) NOT NULL DEFAULT '',
-                    `student_id` int(11) NOT NULL,
-                    `status` varchar(20) NOT NULL DEFAULT 'assigned',
-                    `assigned_at` int(11) DEFAULT NULL,
-                    `completed_at` int(11) DEFAULT NULL,
-                    PRIMARY KEY (`assignment_id`),
-                    KEY `exam_key` (`class_id`,`subject_id`,`date`,`duration`,`session`),
-                    KEY `student_id` (`student_id`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci
-            ");
-        }
-    }
-
-    /**
-     * List of all CBT exams (grouped by class+subject+date+duration+session).
-     * Also supports inline delete via mode='delete'.
-     */
-    function exam_list($mode = '', $class_id = '', $subject_id = '', $duration = '', $date = '', $session = '') {
         if ($this->session->userdata('admin_login') != 1)
-            redirect('login', 'refresh');
-
-        $this->ensure_cbt_schema();
-
-        if ($mode == 'delete' && $class_id !== '' && $subject_id !== '' && $duration !== '' && $date !== '') {
-            if ($session == '%null') $session = '';
-
-            $class_id = (int)$class_id;
-            $subject_id = (int)$subject_id;
-            $duration = (int)$duration;
-
-            $qids = $this->db->select('question_id')->from('question')
-                ->where(array('class_id' => $class_id, 'subject_id' => $subject_id, 'duration' => $duration, 'date' => $date, 'session' => $session))
-                ->get()->result_array();
-
-            if (!empty($qids)) {
-                $ids = array_map(function ($r) { return (int)$r['question_id']; }, $qids);
-                $this->db->where_in('question_id', $ids)->delete('answer');
-                $this->db->where_in('question_id', $ids)->delete('exam_result');
-                $this->db->where_in('question_id', $ids)->delete('question');
-            }
-
-            $this->db->where(array('class_id' => $class_id, 'subject_id' => $subject_id, 'duration' => $duration, 'date' => $date, 'session' => $session))
-                ->delete('exam_assignment');
-
-            $this->session->set_flashdata('flash_message', get_phrase('data_deleted'));
-            redirect(base_url() . 'index.php?admin/exam_list', 'refresh');
-        }
-
-        $query = "select a.class_id, a.subject_id, a.date, a.duration, a.session, a.question_count, "
-               . "b.name class_name, c.name subject_name, count(*) actual_questions, sum(a.marks) total_marks "
-               . "from question a "
-               . "inner join class b on a.class_id=b.class_id "
-               . "inner join subject c on a.subject_id=c.subject_id "
-               . "group by a.class_id, a.subject_id, a.date, a.duration, a.session "
-               . "order by a.date desc, a.class_id, a.subject_id";
-        $page_data['exam_groups'] = $this->db->query($query)->result_array();
-        $page_data['page_name']  = 'exam_list';
-        $page_data['page_title'] = get_phrase('exam_list');
-        $this->load->view('backend/index', $page_data);
+            redirect(base_url() . 'index.php?login', 'refresh');
+        $this->load->model('exam_model');
+        $this->exam_model->ensure_schema();
     }
 
-function exam_view($class_id, $subject_id, $duration, $date, $session = '', $mode = '', $question_id = '') {
-    if ($this->session->userdata('admin_login') != 1)
-        redirect('login', 'refresh');
-
-    $mode1 = $this->input->post('mode1');
-
-    if ($session == '%null') {
-        $session = '';
-    }
-    if ($mode == 'save') {
-        $this->ensure_cbt_schema();
-        $data = array();
-        $data['question'] = $this->input->post('question');
-        $data["correct_answers"] = $this->input->post('correct_answers');
-        $marks = $this->input->post('marks');
-        if ($marks !== null && $marks !== '') {
-            $data['marks'] = (int)$marks;
-        }
-        $this->db->where('question_id', $question_id);
-        $this->db->update('question', $data);
-
-        $answers = $this->input->post('answers');
-        for ($i = 0; $i < sizeof($answers); $i++) {
-            $data = array();
-            $this->db->where('question_id', $question_id);
-            $ascii_A = ord('A');
-            $this->db->where('label', chr($ascii_A + $i));
-            $data["content"] = $answers[$i];
-            $this->db->update('answer', $data);
-        }
-    } else if ($mode == 'delete') {
-        $this->db->where('question_id', $question_id);
-        $this->db->delete('question');
-    } else if ($mode1 == 'save_exam') {
-        $class_id = $this->input->post('class_id');
-        $subject_id = $this->input->post('subject_id');
-        $duration = $this->input->post('duration');
-        $date = date("Y-m-d", strtotime($this->input->post('date')));
-        $session = $this->input->post('session');
-        $question_count = $this->input->post('question_count');
-
-        $usersession = $this->session->userdata('exam_data');
-
-        $this->db->where('class_id', $usersession['class_id']);
-        $this->db->where('subject_id', $usersession['subject_id']);
-        $this->db->where('duration', $usersession['duration']);
-        $this->db->where('date', $usersession['date']);
-        $this->db->where('session', $usersession['session']);
-        $this->db->update('question', array('class_id' => $class_id, 'subject_id' => $subject_id, 'duration' => $duration, 'date' => $date, 'session' => $session, 'question_count' => $question_count));
+    private function cbt_back($url, $message, $error = false)
+    {
+        $this->session->set_flashdata($error ? 'error_message' : 'flash_message', $message);
+        redirect(base_url() . 'index.php?admin/' . $url, 'refresh');
     }
 
-    if ($session == '%null')
-        $session = '';
-    $sql = "select max(b.label) as max_label from question a "
-            . "inner join answer b on a.question_id=b.question_id "
-            . "where a.class_id=" . $class_id . " and a.subject_id=" . $subject_id . " and a.session='" . $session . "' and a.duration='" . $duration . "' and a.date='" . $date . "'";
-    $result = $this->db->query($sql)->result_array();
-    $page_data['max_label'] = $result[0]['max_label'];
-
-    $sql = "select * from question "
-            . "where class_id=" . $class_id . " and subject_id=" . $subject_id . " and session='" . $session . "' and duration='" . $duration . "' and date='" . $date . "'";
-    $exam_list = $this->db->query($sql)->result_array();
-    $exam_data = array();
-    $question_count = 0;
-    foreach ($exam_list as $row) {
-        $exam = array();
-        $exam['question_id'] = $row['question_id'];
-        $exam['class_id'] = $row['class_id'];
-        $exam['subject_id'] = $row['subject_id'];
-        $exam['date'] = $row['date'];
-        $exam['session'] = $row['session'];
-        $exam['duration'] = $row['duration'];
-        $exam['question'] = $row['question'];
-        $exam['correct_answers'] = $row['correct_answers'];
-        $question_count = $row['question_count'];
-
-        $sql = "select * from answer where question_id=" . $row['question_id'] . " order by label";
-        $result = $this->db->query($sql)->result_array();
-        foreach ($result as $row1) {
-            $exam[$row1['label']] = $row1['content'];
-        }
-        array_push($exam_data, $exam);
-    }
-    $page_data['class_id'] = $class_id;
-    $page_data['subject_id'] = $subject_id;
-    $page_data['duration'] = $duration;
-
-    $dates = explode('-', $date);
-    $y = $dates[0];
-    $m = $dates[1];
-    $d = $dates[2];
-    $page_data['date'] = $m . '/' . $d . '/' . $y;
-
-    $page_data['session'] = $session;
-    $page_data['question_count'] = $question_count;
-    $page_data['classes'] = $this->db->get('class')->result_array();
-    $page_data['subjects'] = $this->db->get_where('subject', array('class_id' => $class_id))->result_array();
-    $page_data['exam_data'] = $exam_data;
-
-    $session_data = $page_data;
-    $session_data['date'] = $date;
-
-    $page_data['page_name'] = 'exam_view';
-    $page_data['page_title'] = get_phrase('view_exam');
-    $this->session->set_userdata('exam_data', $session_data);
-    $this->load->view('backend/index', $page_data);
-}
-
-/**
- * Add a new CBT exam header. On POST, scaffolds `question_count` blank question rows
- * with 4 blank answers each, then redirects into exam_view for editing.
- */
-function exam_add($param1 = '') {
-    if ($this->session->userdata('admin_login') != 1)
-        redirect('login', 'refresh');
-
-    $this->ensure_cbt_schema();
-
-    if ($param1 == 'create' || $this->input->post('class_id')) {
-        $class_id       = (int)$this->input->post('class_id');
-        $subject_id     = (int)$this->input->post('subject_id');
-        $duration       = (int)$this->input->post('duration');
-        $session        = trim((string)$this->input->post('session'));
-        $question_count = max(1, (int)$this->input->post('question_count'));
-        $date_raw       = $this->input->post('date');
-        $date           = date('Y-m-d', strtotime($date_raw));
-
-        if (!$class_id || !$subject_id || !$duration || !$date_raw) {
-            redirect(base_url() . 'index.php?admin/exam_add/error', 'refresh');
-        }
-
-        $existing = $this->db->get_where('question', array(
-            'class_id' => $class_id, 'subject_id' => $subject_id,
-            'duration' => $duration, 'date' => $date, 'session' => $session
-        ))->num_rows();
-
-        if ($existing == 0) {
-            for ($i = 0; $i < $question_count; $i++) {
-                $this->db->insert('question', array(
-                    'class_id'        => $class_id,
-                    'subject_id'      => $subject_id,
-                    'date'            => $date,
-                    'session'         => $session,
-                    'question_count'  => $question_count,
-                    'duration'        => $duration,
-                    'question'        => 'Question ' . ($i + 1),
-                    'correct_answers' => 'A',
-                    'marks'           => 1,
-                ));
-                $qid = $this->db->insert_id();
-                foreach (array('A', 'B', 'C', 'D') as $label) {
-                    $this->db->insert('answer', array(
-                        'question_id' => $qid,
-                        'label'       => $label,
-                        'content'     => '',
-                    ));
-                }
-            }
-        }
-
-        $session_url = $session === '' ? '%null' : $session;
-        redirect(base_url() . 'index.php?admin/exam_view/' . $class_id . '/' . $subject_id . '/' . $duration . '/' . $date . '/' . $session_url, 'refresh');
+    /** "Emails: 3 sent, 1 failed" style summary of notification counts. */
+    private function email_summary($counts)
+    {
+        if (empty($counts)) return '';
+        $parts = array();
+        foreach (array('sent' => 'sent', 'failed' => 'failed', 'not_configured' => 'not sent (email not configured)', 'no_email' => 'students without email') as $k => $label)
+            if (!empty($counts[$k])) $parts[] = $counts[$k] . ' ' . $label;
+        return $parts ? ' Emails: ' . implode(', ', $parts) . '.' : '';
     }
 
-    $page_data['error']     = ($param1 == 'error') ? 1 : 0;
-    $page_data['page_name'] = 'exam_add';
-    $page_data['page_title'] = get_phrase('add_exam');
-    $page_data['classes']  = $this->db->get('class')->result_array();
-    $page_data['subjects'] = $this->db->get('subject')->result_array();
-    $this->load->view('backend/index', $page_data);
-}
-
-/**
- * Assign an exam to one or more students of a class. GET lists exams + students.
- * POST receives selected student ids and persists assignments.
- */
-function exam_assign($mode = '') {
-    if ($this->session->userdata('admin_login') != 1)
-        redirect('login', 'refresh');
-
-    $this->ensure_cbt_schema();
-
-    if ($mode == 'save' && $this->input->post('class_id')) {
-        $class_id   = (int)$this->input->post('class_id');
-        $subject_id = (int)$this->input->post('subject_id');
-        $duration   = (int)$this->input->post('duration');
-        $date       = $this->input->post('date');
-        $session    = (string)$this->input->post('session');
-        $students   = $this->input->post('student_ids');
-
-        if (is_array($students)) {
-            foreach ($students as $sid) {
-                $exists = $this->db->get_where('exam_assignment', array(
-                    'class_id' => $class_id, 'subject_id' => $subject_id,
-                    'date' => $date, 'duration' => $duration, 'session' => $session,
-                    'student_id' => (int)$sid
-                ))->num_rows();
-                if ($exists == 0) {
-                    $this->db->insert('exam_assignment', array(
-                        'class_id'   => $class_id,
-                        'subject_id' => $subject_id,
-                        'date'       => $date,
-                        'duration'   => $duration,
-                        'session'    => $session,
-                        'student_id' => (int)$sid,
-                        'status'     => 'assigned',
-                        'assigned_at'=> time(),
-                    ));
-                }
-            }
-        }
-        $this->session->set_flashdata('flash_message', 'Exam assigned successfully.');
-        redirect(base_url() . 'index.php?admin/exam_assign', 'refresh');
+    private function cbt_exam_or_back($exam_id, $back = 'exam_list')
+    {
+        $exam = $this->exam_model->cbt_exam($exam_id);
+        if (!$exam) $this->cbt_back($back, get_phrase('exam_not_found'), true);
+        return $exam;
     }
 
-    $query = "select a.class_id, a.subject_id, a.date, a.duration, a.session, "
-           . "b.name class_name, c.name subject_name, count(*) actual_questions, "
-           . "(select count(*) from exam_assignment x where x.class_id=a.class_id and x.subject_id=a.subject_id "
-           . " and x.date=a.date and x.duration=a.duration and x.session=a.session) assigned_count "
-           . "from question a "
-           . "inner join class b on a.class_id=b.class_id "
-           . "inner join subject c on a.subject_id=c.subject_id "
-           . "group by a.class_id, a.subject_id, a.date, a.duration, a.session "
-           . "order by a.date desc";
-    $page_data['exam_groups'] = $this->db->query($query)->result_array();
-    $page_data['page_name']   = 'exam_assign';
-    $page_data['page_title']  = 'Assign Exam to Student';
-    $this->load->view('backend/index', $page_data);
-}
-
-/**
- * Returns JSON list of students for a given class — used by exam_assign modal.
- */
-function exam_assign_students($class_id) {
-    if ($this->session->userdata('admin_login') != 1) redirect('login', 'refresh');
-    $class_id = (int)$class_id;
-    $this->db->where('is_active', 1);
-    $students = $this->db->get_where('student', array('class_id' => $class_id))->result_array();
-    header('Content-Type: application/json');
-    echo json_encode($students);
-}
-
-/**
- * Online paper checking page. Admin selects an exam + a student, then sees
- * each question with the student's submitted answer and the correct answer,
- * and inputs awarded marks per question.
- */
-function exam_paper_check($mode = '') {
-    if ($this->session->userdata('admin_login') != 1)
-        redirect('login', 'refresh');
-
-    $this->ensure_cbt_schema();
-
-    if ($mode == 'save' && $this->input->post('student_id')) {
-        $student_id = (int)$this->input->post('student_id');
-        $awarded    = $this->input->post('awarded');           // [question_id => marks]
-        $answers    = $this->input->post('answer');            // [question_id => 'A'|'B'...]
-        $now        = time();
-
-        if (is_array($awarded)) {
-            foreach ($awarded as $qid => $marks) {
-                $qid = (int)$qid;
-                $answer = isset($answers[$qid]) ? $answers[$qid] : '';
-
-                $exists = $this->db->get_where('exam_result', array('student_id' => $student_id, 'question_id' => $qid))->row();
-                $payload = array(
-                    'answer'        => $answer,
-                    'marks_awarded' => is_numeric($marks) ? $marks : 0,
-                    'status'        => 'checked',
-                    'submitted_at'  => $now,
-                );
-                if ($exists) {
-                    $this->db->where('result_id', $exists->result_id)->update('exam_result', $payload);
-                } else {
-                    $payload['student_id']  = $student_id;
-                    $payload['question_id'] = $qid;
-                    $this->db->insert('exam_result', $payload);
-                }
-            }
-        }
-
-        // mark assignment completed
-        $this->db->where(array(
-            'class_id'   => (int)$this->input->post('class_id'),
-            'subject_id' => (int)$this->input->post('subject_id'),
-            'date'       => $this->input->post('date'),
-            'duration'   => (int)$this->input->post('duration'),
-            'session'    => (string)$this->input->post('session'),
-            'student_id' => $student_id,
-        ))->update('exam_assignment', array('status' => 'completed', 'completed_at' => $now));
-
-        $this->session->set_flashdata('flash_message', 'Paper checked and marks saved.');
-        redirect(base_url() . 'index.php?admin/exam_paper_check', 'refresh');
-    }
-
-    $class_id   = $this->input->get('class_id');
-    $subject_id = $this->input->get('subject_id');
-    $duration   = $this->input->get('duration');
-    $date       = $this->input->get('date');
-    $session    = $this->input->get('session');
-    $student_id = (int)$this->input->get('student_id');
-
-    if ($class_id !== null && $student_id) {
-        $class_id   = (int)$class_id;
-        $subject_id = (int)$subject_id;
-        $duration   = (int)$duration;
-        $session    = $session === null ? '' : (string)$session;
-
-        $questions = $this->db->get_where('question', array(
-            'class_id' => $class_id, 'subject_id' => $subject_id,
-            'duration' => $duration, 'date' => $date, 'session' => $session
-        ))->result_array();
-
-        foreach ($questions as &$q) {
-            $q['options'] = $this->db->order_by('label', 'asc')
-                ->get_where('answer', array('question_id' => $q['question_id']))->result_array();
-            $q['existing'] = $this->db->get_where('exam_result', array(
-                'student_id' => $student_id, 'question_id' => $q['question_id']
-            ))->row_array();
-        }
-        unset($q);
-
-        $cls_row = $this->db->get_where('class',   array('class_id'   => $class_id))->row();
-        $sub_row = $this->db->get_where('subject', array('subject_id' => $subject_id))->row();
-        $page_data['questions'] = $questions;
-        $page_data['student']   = $this->db->get_where('student', array('student_id' => $student_id))->row_array();
-        $page_data['exam']      = array(
-            'class_id'   => $class_id,
-            'subject_id' => $subject_id,
-            'duration'   => $duration,
-            'date'       => $date,
-            'session'    => $session,
-            'class_name'   => $cls_row ? $cls_row->name : '',
-            'subject_name' => $sub_row ? $sub_row->name : '',
+    private function cbt_header_from_post()
+    {
+        $date = sms_parse_exam_date($this->input->post('exam_date'));
+        $start = trim((string)$this->input->post('start_time'));
+        $end = trim((string)$this->input->post('end_time'));
+        return array(
+            'title'        => trim((string)$this->input->post('title')),
+            'class_id'     => (int)$this->input->post('class_id'),
+            'subject_id'   => (int)$this->input->post('subject_id'),
+            'session'      => trim((string)$this->input->post('session')),
+            'exam_date'    => $date,
+            'start_time'   => preg_match('/^\d{1,2}:\d{2}$/', $start) ? $start . ':00' : '',
+            'end_time'     => preg_match('/^\d{1,2}:\d{2}$/', $end) ? $end . ':00' : null,
+            'duration'     => max(0, (int)$this->input->post('duration')),
+            'pass_percent' => min(100, max(0, (int)$this->input->post('pass_percent'))),
+            'instructions' => trim((string)$this->input->post('instructions')),
         );
     }
 
-    // exam list with assigned students for selection
-    $sql = "select a.class_id, a.subject_id, a.date, a.duration, a.session, "
-         . "b.name class_name, c.name subject_name, d.student_id, e.name student_name, "
-         . "(select status from exam_assignment x where x.class_id=a.class_id and x.subject_id=a.subject_id "
-         . " and x.date=a.date and x.duration=a.duration and x.session=a.session and x.student_id=d.student_id limit 1) status "
-         . "from question a "
-         . "inner join class b on a.class_id=b.class_id "
-         . "inner join subject c on a.subject_id=c.subject_id "
-         . "inner join exam_assignment d on d.class_id=a.class_id and d.subject_id=a.subject_id "
-         . " and d.date=a.date and d.duration=a.duration and d.session=a.session "
-         . "inner join student e on e.student_id=d.student_id "
-         . "group by a.class_id, a.subject_id, a.date, a.duration, a.session, d.student_id "
-         . "order by a.date desc, e.name";
-    $page_data['assignments'] = $this->db->query($sql)->result_array();
-    $page_data['page_name']   = 'exam_paper_check';
-    $page_data['page_title']  = 'Online Paper Checking';
-    $this->load->view('backend/index', $page_data);
-}
-
-/**
- * Result listing: per-student totals across all attempted exams.
- */
-function exam_result_list() {
-    if ($this->session->userdata('admin_login') != 1)
-        redirect('login', 'refresh');
-
-    $this->ensure_cbt_schema();
-
-    $sql = "select b.class_id, b.subject_id, b.date, b.duration, b.session, "
-         . "a.student_id, st.name student_name, cls.name class_name, sub.name subject_name, "
-         . "sum(coalesce(a.marks_awarded, 0)) total_marks, "
-         . "(select sum(marks) from question q where q.class_id=b.class_id and q.subject_id=b.subject_id "
-         . " and q.date=b.date and q.duration=b.duration and q.session=b.session) total_possible, "
-         . "max(a.status) status "
-         . "from exam_result a "
-         . "inner join question b on a.question_id=b.question_id "
-         . "inner join student st on st.student_id=a.student_id "
-         . "inner join class cls on cls.class_id=b.class_id "
-         . "inner join subject sub on sub.subject_id=b.subject_id "
-         . "group by a.student_id, b.class_id, b.subject_id, b.date, b.duration, b.session "
-         . "order by b.date desc, st.name";
-    $page_data['results']    = $this->db->query($sql)->result_array();
-    $page_data['page_name']  = 'exam_result_list';
-    $page_data['page_title'] = get_phrase('exam_result');
-    $this->load->view('backend/index', $page_data);
-}
-
-function exam_result_detail() {
-    if ($this->session->userdata('admin_login') != 1)
-        redirect('login', 'refresh');
-
-    $this->ensure_cbt_schema();
-
-    $class_id   = $this->input->post('class_id')   ?: $this->input->get('class_id');
-    $subject_id = $this->input->post('subject_id') ?: $this->input->get('subject_id');
-    $student_id = $this->input->post('student_id') ?: $this->input->get('student_id');
-    $duration   = $this->input->post('duration')   ?: $this->input->get('duration');
-    $session    = $this->input->post('session');
-    if ($session === null || $session === false) $session = $this->input->get('session');
-    $date       = $this->input->post('date')       ?: $this->input->get('date');
-
-    if (!$class_id || !$subject_id || !$student_id || !$date) {
-        redirect(base_url() . 'index.php?admin/exam_result_list', 'refresh');
+    private function cbt_header_error($h)
+    {
+        if ($h['title'] === '') return get_phrase('exam_title_is_required');
+        if (!$h['class_id'] || !$h['subject_id']) return get_phrase('select_class_and_subject');
+        $sub = $this->db->get_where('subject', array('subject_id' => $h['subject_id']))->row();
+        if (!$sub || (int)$sub->class_id !== $h['class_id']) return get_phrase('subject_does_not_belong_to_class');
+        if ($h['exam_date'] === '' || $h['start_time'] === '') return get_phrase('exam_date_and_start_time_are_required');
+        if ($h['duration'] < 1) return get_phrase('duration_must_be_at_least_1_minute');
+        list($opens, $closes) = sms_cbt_window($h);
+        if ($h['end_time'] && sms_cbt_ts($h['exam_date'], $h['end_time']) <= $opens) return get_phrase('end_time_must_be_after_start_time');
+        return null;
     }
 
-    $class_id   = (int)$class_id;
-    $subject_id = (int)$subject_id;
-    $student_id = (int)$student_id;
-    $duration   = (int)$duration;
-    $session    = $session === null ? '' : (string)$session;
-
-    $this->db->select('q.*, r.answer student_answer, r.marks_awarded, r.status, r.submitted_at');
-    $this->db->from('question q');
-    $this->db->join('exam_result r', 'r.question_id = q.question_id and r.student_id = ' . $student_id, 'left');
-    $this->db->where(array(
-        'q.class_id' => $class_id, 'q.subject_id' => $subject_id,
-        'q.date' => $date, 'q.duration' => $duration, 'q.session' => $session
-    ));
-    $this->db->order_by('q.question_id', 'asc');
-    $questions = $this->db->get()->result_array();
-
-    foreach ($questions as &$q) {
-        $q['options'] = $this->db->order_by('label', 'asc')
-            ->get_where('answer', array('question_id' => $q['question_id']))->result_array();
+    /** CBT exam list. */
+    function exam_list($mode = '', $exam_id = '')
+    {
+        $this->cbt_guard();
+        if ($mode == 'delete') {
+            $exam = $this->cbt_exam_or_back($exam_id);
+            if ((int)$exam['submitted_count'] > 0)
+                $this->cbt_back('exam_list', get_phrase('exam_has_submitted_attempts_and_cannot_be_deleted'), true);
+            $this->exam_model->delete_cbt_exam($exam_id);
+            $this->cbt_back('exam_list', get_phrase('data_deleted'));
+        }
+        $now = time();
+        $exams = $this->exam_model->cbt_exams();
+        foreach ($exams as &$e) $e['state'] = sms_cbt_state($e, $now);
+        $page_data['exams']      = $exams;
+        $page_data['page_name']  = 'exam_list';
+        $page_data['page_title'] = get_phrase('cbt_exams');
+        $this->load->view('backend/index', $page_data);
     }
-    unset($q);
 
-    $cls_row = $this->db->get_where('class',   array('class_id'   => $class_id))->row();
-    $sub_row = $this->db->get_where('subject', array('subject_id' => $subject_id))->row();
-    $page_data['questions']    = $questions;
-    $page_data['student']      = $this->db->get_where('student', array('student_id' => $student_id))->row_array();
-    $page_data['class_name']   = $cls_row ? $cls_row->name : '';
-    $page_data['subject_name'] = $sub_row ? $sub_row->name : '';
-    $page_data['exam']       = array(
-        'class_id' => $class_id, 'subject_id' => $subject_id,
-        'date' => $date, 'duration' => $duration, 'session' => $session,
-    );
-    $page_data['page_name']  = 'exam_result_detail';
-    $page_data['page_title'] = get_phrase('exam_result');
-    $this->load->view('backend/index', $page_data);
-}
+    /** Create a CBT exam header + blank questions, then continue to the question editor. */
+    function exam_add($param1 = '')
+    {
+        $this->cbt_guard();
+        if ($param1 == 'create') {
+            $h = $this->cbt_header_from_post();
+            $error = $this->cbt_header_error($h);
+            $count = (int)$this->input->post('question_count');
+            if ($error === null && ($count < 1 || $count > 200)) $error = get_phrase('question_count_must_be_1_to_200');
+            if ($error !== null) {
+                $this->session->set_flashdata('error_message', $error);
+                $this->session->set_flashdata('exam_form', $this->input->post());
+                redirect(base_url() . 'index.php?admin/exam_add', 'refresh');
+            }
+            $exam_id = $this->exam_model->create_cbt_exam($h, $count, (int)$this->input->post('options_per_question'));
+            $this->cbt_back('exam_view/' . $exam_id, get_phrase('exam_created_now_enter_the_questions'));
+        }
+        $page_data['form']       = (array)$this->session->flashdata('exam_form');
+        $page_data['classes']    = $this->db->order_by('name', 'ASC')->get('class')->result_array();
+        $page_data['subjects']   = $this->db->order_by('name', 'ASC')->get('subject')->result_array();
+        $page_data['session']    = $this->exam_model->setting('session');
+        $page_data['page_name']  = 'exam_add';
+        $page_data['page_title'] = get_phrase('add_cbt_exam');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /** Question editor + exam settings + publish for one CBT exam. */
+    function exam_view($exam_id = '', $action = '', $question_id = '')
+    {
+        $this->cbt_guard();
+        $exam = $this->cbt_exam_or_back($exam_id);
+        $started = $this->db->where('exam_id', (int)$exam_id)->where_in('status', array('in_progress', 'submitted', 'checked'))->count_all_results('exam_assignment');
+        $locked = $started > 0;   // questions are frozen once anyone has started
+        $here = 'exam_view/' . (int)$exam_id;
+
+        if ($action == 'save_settings') {
+            $h = $this->cbt_header_from_post();
+            if ($locked) { $h['class_id'] = $exam['class_id']; $h['subject_id'] = $exam['subject_id']; }
+            $error = $this->cbt_header_error($h);
+            if ($error !== null) $this->cbt_back($here, $error, true);
+            $this->exam_model->update_cbt_exam($exam_id, $h);
+            $this->cbt_back($here, get_phrase('exam_settings_saved'));
+        }
+        if (in_array($action, array('save_question', 'add_question', 'delete_question'), true) && $locked)
+            $this->cbt_back($here, get_phrase('questions_are_locked_because_students_have_started'), true);
+        if ($action == 'save_question') {
+            $q = $this->db->get_where('question', array('question_id' => (int)$question_id, 'exam_id' => (int)$exam_id))->row();
+            if (!$q) $this->cbt_back($here, get_phrase('question_not_found'), true);
+            $options = (array)$this->input->post('options');
+            $correct = strtoupper(trim((string)$this->input->post('correct_answers')));
+            if (trim((string)$this->input->post('question')) === '') $this->cbt_back($here, get_phrase('question_text_is_required'), true);
+            if (!isset($options[$correct]) || trim((string)$options[$correct]) === '')
+                $this->cbt_back($here, get_phrase('correct_answer_must_be_a_filled_option'), true);
+            $this->exam_model->save_question($question_id, $this->input->post('question'), $options, $correct, $this->input->post('marks'));
+            $this->cbt_back($here, get_phrase('question_saved'));
+        }
+        if ($action == 'add_question') {
+            $raw = $this->db->get_where('cbt_exam', array('exam_id' => (int)$exam_id))->row_array();
+            $this->exam_model->add_question($raw);
+            $this->cbt_back($here, get_phrase('question_added'));
+        }
+        if ($action == 'delete_question') {
+            $this->exam_model->delete_question($question_id);
+            $this->cbt_back($here, get_phrase('question_deleted'));
+        }
+        if ($action == 'publish') {
+            $problems = sms_cbt_publish_problems($exam, $this->exam_model->cbt_questions($exam_id));
+            if ($problems) {
+                $this->session->set_flashdata('publish_problems', $problems);
+                $this->cbt_back($here, get_phrase('exam_cannot_be_published_yet'), true);
+            }
+            $this->exam_model->update_cbt_exam($exam_id, array('status' => 'published', 'published_at' => time()));
+            // Students assigned while it was a draft get their "exam scheduled" email now.
+            $pending = array_column(array_filter($this->exam_model->assignments($exam_id), function ($a) { return empty($a['notified_at']); }), 'student_id');
+            $this->load->model('email_model');
+            $counts = $this->email_model->notify_cbt_scheduled($exam_id, $pending);
+            $this->cbt_back($here, get_phrase('exam_published') . '. ' . get_phrase('you_can_now_assign_it_to_students') . '.' . $this->email_summary($counts));
+        }
+        if ($action == 'unpublish') {
+            if ($locked) $this->cbt_back($here, get_phrase('exam_cannot_be_unpublished_after_students_started'), true);
+            $this->exam_model->update_cbt_exam($exam_id, array('status' => 'draft'));
+            $this->cbt_back($here, get_phrase('exam_moved_back_to_draft'));
+        }
+
+        $page_data['exam']       = $exam;
+        $page_data['state']      = sms_cbt_state($exam, time());
+        $page_data['questions']  = $this->exam_model->cbt_questions($exam_id);
+        $page_data['locked']     = $locked;
+        $page_data['problems']   = (array)$this->session->flashdata('publish_problems');
+        $page_data['classes']    = $this->db->order_by('name', 'ASC')->get('class')->result_array();
+        $page_data['subjects']   = $this->db->order_by('name', 'ASC')->get('subject')->result_array();
+        $page_data['page_name']  = 'exam_view';
+        $page_data['page_title'] = get_phrase('cbt_exam') . ': ' . $exam['title'];
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /** Assign a published CBT exam to students of its class (emails each newly assigned student). */
+    function exam_assign($exam_id = '', $action = '', $student_id = '')
+    {
+        $this->cbt_guard();
+        if ($exam_id !== '') {
+            $exam = $this->cbt_exam_or_back($exam_id, 'exam_assign');
+            $here = 'exam_assign/' . (int)$exam_id;
+            if ($action == 'save') {
+                if ($exam['status'] !== 'published') $this->cbt_back($here, get_phrase('publish_the_exam_before_assigning_it'), true);
+                if (sms_cbt_state($exam, time()) === 'closed') $this->cbt_back($here, get_phrase('this_exam_has_already_closed'), true);
+                $ids = (array)$this->input->post('student_ids');
+                if (!$ids) $this->cbt_back($here, get_phrase('select_at_least_one_student'), true);
+                $new = $this->exam_model->assign_students($exam_id, $ids);
+                $this->load->model('email_model');
+                $counts = $this->email_model->notify_cbt_scheduled($exam_id, $new);
+                $this->cbt_back($here, count($new) . ' ' . get_phrase('students_assigned') . '.' . $this->email_summary($counts));
+            }
+            if ($action == 'remove') {
+                $ok = $this->exam_model->unassign_student($exam_id, $student_id);
+                $this->cbt_back($here, get_phrase($ok ? 'student_removed_from_exam' : 'cannot_remove_a_student_who_has_started'), !$ok);
+            }
+            $assigned = array();
+            foreach ($this->exam_model->assignments($exam_id) as $a) $assigned[$a['student_id']] = $a;
+            $page_data['exam']     = $exam;
+            $page_data['state']    = sms_cbt_state($exam, time());
+            $page_data['students'] = $this->exam_model->active_students_of_class($exam['class_id']);
+            $page_data['assigned'] = $assigned;
+        }
+        $now = time();
+        $exams = $this->exam_model->cbt_exams();
+        foreach ($exams as &$e) $e['state'] = sms_cbt_state($e, $now);
+        $page_data['exams']      = $exams;
+        $page_data['page_name']  = 'exam_assign';
+        $page_data['page_title'] = get_phrase('assign_exam_to_students');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /** Review submitted attempts; MCQs are auto-marked, the teacher can adjust marks per question. */
+    function exam_paper_check($exam_id = '', $student_id = '', $action = '')
+    {
+        $this->cbt_guard();
+        if ($exam_id !== '') {
+            $exam = $this->cbt_exam_or_back($exam_id, 'exam_paper_check');
+            $this->exam_model->auto_submit_expired($exam, time());
+            if ($student_id !== '') {
+                $a = $this->exam_model->assignment($exam_id, $student_id);
+                if (!$a || !in_array($a['status'], array('submitted', 'checked'), true))
+                    $this->cbt_back('exam_paper_check/' . (int)$exam_id, get_phrase('this_student_has_not_submitted_yet'), true);
+                if ($action == 'save') {
+                    $score = $this->exam_model->override_marks($exam_id, $student_id, (array)$this->input->post('awarded'));
+                    $note = $exam['results_published'] ? ' ' . get_phrase('results_already_published_student_sees_new_marks') : '';
+                    $this->cbt_back('exam_paper_check/' . (int)$exam_id, get_phrase('marks_saved') . ': ' . $score . '.' . $note);
+                }
+                $page_data['student']   = $this->exam_model->student($student_id);
+                $page_data['attempt']   = $a;
+                $page_data['questions'] = $this->exam_model->cbt_questions($exam_id);
+                $page_data['answers']   = $this->exam_model->student_answers($exam_id, $student_id);
+            }
+            $page_data['exam']        = $this->exam_model->cbt_exam($exam_id);
+            $page_data['assignments'] = $this->exam_model->assignments($exam_id);
+        }
+        $page_data['exams']      = $this->exam_model->cbt_exams(array('e.status' => 'published'));
+        $page_data['page_name']  = 'exam_paper_check';
+        $page_data['page_title'] = get_phrase('paper_checking');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /** Results per exam: score, %, pass/fail, rank; publish emails each student (and parent). */
+    function exam_result_list($exam_id = '', $action = '')
+    {
+        $this->cbt_guard();
+        if ($exam_id !== '') {
+            $exam = $this->cbt_exam_or_back($exam_id, 'exam_result_list');
+            $here = 'exam_result_list/' . (int)$exam_id;
+            $this->exam_model->auto_submit_expired($exam, time());
+            if ($action == 'publish') {
+                $results = $this->exam_model->cbt_results($exam_id);
+                $finished = array_filter($results, function ($r) { return $r['percent'] !== null; });
+                if (!$finished) $this->cbt_back($here, get_phrase('no_submitted_attempts_to_publish'), true);
+                $this->db->where('exam_id', (int)$exam_id)->update('cbt_exam', array('results_published' => 1, 'results_published_at' => time()));
+                $this->load->model('email_model');
+                $counts = $this->email_model->notify_cbt_results($exam_id);
+                $this->cbt_back($here, get_phrase('results_published') . '.' . $this->email_summary($counts));
+            }
+            if ($action == 'unpublish') {
+                $this->db->where('exam_id', (int)$exam_id)->update('cbt_exam', array('results_published' => 0));
+                $this->cbt_back($here, get_phrase('results_hidden_from_students'));
+            }
+            $page_data['exam']    = $this->exam_model->cbt_exam($exam_id);
+            $page_data['results'] = $this->exam_model->cbt_results($exam_id);
+        }
+        $page_data['exams']      = $this->exam_model->cbt_exams(array('e.status' => 'published'));
+        $page_data['page_name']  = 'exam_result_list';
+        $page_data['page_title'] = get_phrase('cbt_results');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    function exam_result_detail($exam_id = '', $student_id = '')
+    {
+        $this->cbt_guard();
+        $exam = $this->cbt_exam_or_back($exam_id, 'exam_result_list');
+        $a = $this->exam_model->assignment($exam_id, $student_id);
+        if (!$a) $this->cbt_back('exam_result_list/' . (int)$exam_id, get_phrase('student_not_assigned_to_this_exam'), true);
+        $page_data['exam']       = $exam;
+        $page_data['attempt']    = $a;
+        $page_data['student']    = $this->exam_model->student($student_id);
+        $page_data['questions']  = $this->exam_model->cbt_questions($exam_id);
+        $page_data['answers']    = $this->exam_model->student_answers($exam_id, $student_id);
+        $page_data['page_name']  = 'exam_result_detail';
+        $page_data['page_title'] = get_phrase('exam_result');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /* ---------------- Email preview (eye button) ---------------- */
+
+    /** Show the exact email a notification will send (before sending), or a logged email. URL: email_preview/<type>/<ref_id>/<extra> */
+    function email_preview($type = '', $ref_id = 0, $extra = 0)
+    {
+        $this->cbt_guard();
+        $this->load->model('email_model');
+        $p = $this->email_model->preview($type, (int)$ref_id, (int)$extra);
+        if ($p === null) show_404();
+        $this->load->view('backend/admin/email_preview', array('p' => $p));
+    }
+
+
+    /* ---------------- Menu permissions (teacher / parent / student portals) ---------------- */
+
+    function menu_permissions($action = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url() . 'index.php?login', 'refresh');
+        $this->load->model('portal_model');
+        if ($action == 'save') {
+            // Matrix rules (locked menus always on) live in sms_portal_helper (unit tested).
+            $this->portal_model->save_permissions(sms_menu_permissions_from_post((array)$this->input->post('perm')));
+            $this->session->set_flashdata('flash_message', get_phrase('menu_permissions_saved'));
+            redirect(base_url() . 'index.php?admin/menu_permissions', 'refresh');
+        }
+        if ($action == 'reset') {
+            $this->portal_model->save_permissions(array());
+            $this->session->set_flashdata('flash_message', get_phrase('menu_permissions_reset_to_default'));
+            redirect(base_url() . 'index.php?admin/menu_permissions', 'refresh');
+        }
+        $page_data['menus']      = sms_portal_menus();
+        $page_data['perms']      = $this->portal_model->permissions();
+        $page_data['page_name']  = 'menu_permissions';
+        $page_data['page_title'] = get_phrase('menu_permissions');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /* ---------------- Theme & colours ---------------- */
+
+    function theme_settings($action = '')
+    {
+        if ($this->session->userdata('admin_login') != 1)
+            redirect(base_url() . 'index.php?login', 'refresh');
+        $set = function ($type, $value) {
+            if ($this->db->get_where('settings', array('type' => $type))->row())
+                $this->db->where('type', $type)->update('settings', array('description' => $value));
+            else
+                $this->db->insert('settings', array('type' => $type, 'description' => $value));
+        };
+        if ($action == 'save') {
+            $preset = (string)$this->input->post('ui_theme');
+            if (!isset(sms_theme_presets()[$preset])) $preset = 'sunshine';
+            $use_custom = (bool)$this->input->post('use_custom');
+            $primary = (string)$this->input->post('ui_primary');
+            $accent  = (string)$this->input->post('ui_accent');
+            $font    = in_array($this->input->post('ui_font'), array('nunito', 'baloo', 'system'), true) ? $this->input->post('ui_font') : 'nunito';
+            $set('ui_theme', $preset);
+            $set('ui_primary', $use_custom && sms_valid_hex_color($primary) ? strtolower($primary) : '');
+            $set('ui_accent', $use_custom && sms_valid_hex_color($accent) ? strtolower($accent) : '');
+            $set('ui_font', $font);
+            $this->session->set_flashdata('flash_message', get_phrase('theme_saved'));
+            redirect(base_url() . 'index.php?admin/theme_settings', 'refresh');
+        }
+        $current = array('ui_theme' => 'sunshine', 'ui_primary' => '', 'ui_accent' => '', 'ui_font' => 'nunito');
+        foreach ($this->db->where_in('type', array_keys($current))->get('settings')->result_array() as $r)
+            if ($r['description'] !== '') $current[$r['type']] = $r['description'];
+        $page_data['current']    = $current;
+        $page_data['presets']    = sms_theme_presets();
+        $page_data['page_name']  = 'theme_settings';
+        $page_data['page_title'] = get_phrase('theme_and_colours');
+        $this->load->view('backend/index', $page_data);
+    }
+
+    /* ---------------- Email settings & log ---------------- */
+
+    function email_settings($action = '', $id = '')
+    {
+        $this->cbt_guard();
+        $this->load->model('email_model');
+        if ($action == 'save') {
+            $fields = array('smtp_host', 'smtp_port', 'smtp_crypto', 'smtp_user');
+            foreach ($fields as $f) $this->db->where('type', $f)->update('settings', array('description' => trim((string)$this->input->post($f))));
+            // Gmail shows app passwords in groups of 4 ("abcd efgh ..."); spaces are not part of it.
+            $pass = str_replace(' ', '', (string)$this->input->post('smtp_pass'));
+            if ($pass !== '') $this->db->where('type', 'smtp_pass')->update('settings', array('description' => $pass));
+            $this->db->where('type', 'email_enabled')->update('settings', array('description' => $this->input->post('email_enabled') ? '1' : '0'));
+            $this->db->where('type', 'email_copy_parent')->update('settings', array('description' => $this->input->post('email_copy_parent') ? '1' : '0'));
+            $this->cbt_back('email_settings', get_phrase('settings_updated'));
+        }
+        if ($action == 'test') {
+            $to = trim((string)$this->input->post('test_email'));
+            if (!filter_var($to, FILTER_VALIDATE_EMAIL)) $this->cbt_back('email_settings', get_phrase('invalid_email_address'), true);
+            $school = $this->exam_model->school();
+            $status = $this->email_model->send_logged($to, 'Test email from ' . $school['name'],
+                sms_email_wrap($school, 'Email is working', '<p>This test email confirms that ' . htmlspecialchars($school['name']) . ' can send emails to students and parents.</p>'),
+                array('event' => 'test'));
+            if ($status === 'sent') $this->cbt_back('email_settings', get_phrase('test_email_sent_to') . ' ' . $to);
+            $this->cbt_back('email_settings', get_phrase('test_email_failed') . ': ' . mb_substr($this->email_model->last_error, 0, 300), true);
+        }
+        if ($action == 'resend') {
+            $status = $this->email_model->resend_log($id);
+            $this->cbt_back('email_settings', $status === 'sent' ? get_phrase('email_sent') : get_phrase('email_failed') . ': ' . mb_substr($this->email_model->last_error, 0, 300), $status !== 'sent');
+        }
+        $page_data['settings'] = array();
+        foreach (array('smtp_host', 'smtp_port', 'smtp_crypto', 'smtp_user', 'smtp_pass', 'email_enabled', 'email_copy_parent', 'cron_key') as $f)
+            $page_data['settings'][$f] = $this->exam_model->setting($f);
+        $page_data['configured'] = $this->email_model->is_configured();
+        $page_data['logs']       = $this->db->order_by('log_id', 'DESC')->limit(100)->get('email_log')->result_array();
+        $page_data['page_name']  = 'email_settings';
+        $page_data['page_title'] = get_phrase('email_settings');
+        $this->load->view('backend/index', $page_data);
+    }
 
     /****TEST WHATSAPP FUNCTIONALITY*****/
     public function sendmessagetest()

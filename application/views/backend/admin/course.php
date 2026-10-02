@@ -24,9 +24,9 @@
     <?php foreach ($courses as $row): ?>
       <tr>
         <td><?php echo $row['course_id']; ?></td>
-        <td><?php echo htmlspecialchars($row['name']); ?></td>
-        <td><?php echo htmlspecialchars($row['standard_name']); ?></td>
-        <td><?php echo htmlspecialchars($row['session_name']); ?></td>
+        <td><?php echo htmlspecialchars((string)$row['name']); ?></td>
+        <td><?php echo htmlspecialchars((string)$row['standard_name']); ?></td>
+        <td><?php echo htmlspecialchars((string)$row['session_name']); ?></td>
         <td><?php echo number_format((float)$row['total_fees'], 2); ?></td>
         <td><?php echo (int)$row['installments']; ?></td>
         <td>

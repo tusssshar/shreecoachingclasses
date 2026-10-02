@@ -114,8 +114,9 @@
             
             </div>
 			
+			<?php /* UPDATE PRODUCT disabled: vendor updater not used (would overwrite custom code / run uploaded PHP).
 			<div class="panel panel-primary" data-collapsed="0">
-            
+
             <div class="panel-heading">
                 <div class="panel-title">
                     <?php echo get_phrase('update_product');?>
@@ -146,7 +147,8 @@
             </div>
 
         </div>
-        
+			*/ ?>
+
         </div>
 
       <?php 

@@ -3,29 +3,29 @@
             
                 <div class="panel-heading">
                     <div class="panel-title">
-					 <?php echo get_phrase('bannar_information_page'); ?>
+					 <?php echo get_phrase('banner_information_page'); ?>
 					</div>
 					</div>
 <div class="table-responsive">
 <br>
             <div class="row" style="margin-bottom: 15px;">
                 <div class="col-sm-6">
-                    <a href="javascript:;" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/modal_banar_add/');" 
+                    <a href="javascript:;" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/modal_banner_add/');" 
                         class="btn btn-primary">
                         <i class="entypo-plus-circled"></i>
-                        <?php echo get_phrase('add_new_bannar');?>
+                        <?php echo get_phrase('add_new_banner');?>
                     </a>
                 </div>
                 <div class="col-sm-6 text-right">
-                    <a href="<?php echo base_url();?>index.php?admin/export_list/banar/excel" target="_blank" class="btn btn-info btn-sm">Excel</a>
-                    <a href="<?php echo base_url();?>index.php?admin/export_list/banar/pdf" target="_blank" class="btn btn-danger btn-sm">PDF</a>
-                    <a href="<?php echo base_url();?>index.php?admin/export_list/banar/print" target="_blank" class="btn btn-default btn-sm">Print</a>
+                    <a href="<?php echo base_url();?>index.php?admin/export_list/banner/excel" target="_blank" class="btn btn-info btn-sm">Excel</a>
+                    <a href="<?php echo base_url();?>index.php?admin/export_list/banner/pdf" target="_blank" class="btn btn-danger btn-sm">PDF</a>
+                    <a href="<?php echo base_url();?>index.php?admin/export_list/banner/print" target="_blank" class="btn btn-default btn-sm">Print</a>
                 </div>
             </div>
                <table class="table table-bordered datatable" id="table_export">
                     <thead>
                         <tr>
-                            <th width="80"><div><?php echo get_phrase('front_end_banar');?></div></th>
+                            <th width="80"><div><?php echo get_phrase('front_end_banner');?></div></th>
                             <th><div><?php echo get_phrase('b_text_one');?></div></th>
                             <th><div><?php echo get_phrase('b_text_two');?></div></th>
                             <th><div><?php echo get_phrase('options');?></div></th>
@@ -33,10 +33,10 @@
                     </thead>
                     <tbody>
                         <?php 
-                                $banars	=	$this->db->get('banar' )->result_array();
-                                foreach($banars as $row):?>
+                                $banners	=	$this->db->get('banner' )->result_array();
+                                foreach($banners as $row):?>
                         <tr>
-                            <td><img src="<?php echo $this->crud_model->get_image_url('banar',$row['banar_id']);?>" class="img-circle" width="30" /></td>
+                            <td><img src="<?php echo $this->crud_model->get_image_url('banner',$row['banner_id']);?>" class="img-circle" width="30" /></td>
                             <td><?php echo $row['b_namea'];?></td>
                             <td><?php echo $row['b_namea'];?></td>
                             <td>
@@ -49,7 +49,7 @@
                                         
                                         <!-- accountant EDITING LINK -->
                                         <li>
-                                        	<a href="#" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/modal_banar_edit/<?php echo $row['banar_id'];?>');">
+                                        	<a href="#" onclick="showAjaxModal('<?php echo base_url();?>index.php?modal/popup/modal_banner_edit/<?php echo $row['banner_id'];?>');">
                                             	<i class="entypo-pencil"></i>
 													<?php echo get_phrase('edit');?>
                                                	</a>
@@ -58,7 +58,7 @@
                                         
                                         <!-- accountant DELETION LINK -->
                                         <li>
-                                        	<a href="#" onclick="confirm_modal('<?php echo base_url();?>index.php?admin/banar/delete/<?php echo $row['banar_id'];?>');">
+                                        	<a href="#" onclick="confirm_modal('<?php echo base_url();?>index.php?admin/banner/delete/<?php echo $row['banner_id'];?>');">
                                             	<i class="entypo-trash"></i>
 													<?php echo get_phrase('delete');?>
                                                	</a>

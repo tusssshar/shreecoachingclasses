@@ -101,7 +101,7 @@ abstract class CI_Session_driver implements SessionHandlerInterface {
 	{
 		return setcookie(
 			$this->_config['cookie_name'],
-			NULL,
+			'',   // was NULL: PHP 8.1+ deprecates a null cookie value (broke the AJAX login reply)
 			1,
 			$this->_config['cookie_path'],
 			$this->_config['cookie_domain'],

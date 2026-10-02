@@ -230,6 +230,92 @@ if (empty($grades)) {
         $matched !== null && $mid >= (float)$matched['mark_from'] && $mid <= (float)$matched['mark_upto']);
 }
 
+/* ---- Languages (live `language` table) ---- */
+imodule('F. Languages (live language table)');
+$db->set_charset('utf8');
+
+$lang_fields = array();
+foreach ($db->query("SHOW COLUMNS FROM language") as $c) $lang_fields[] = $c['Field'];
+$expected_langs = array('english', 'bengali', 'hindi', 'marathi', 'kannada', 'gujarati', 'tamil');
+$langs = sms_language_columns($lang_fields);
+$tmp = $langs; sort($tmp); $exp = $expected_langs; sort($exp);
+icheck('exactly the 7 chosen languages exist', implode(',', $exp), implode(',', $tmp));
+
+$uniq = $db->query("SHOW INDEX FROM language WHERE Key_name = 'uniq_phrase'")->num_rows;
+icheck_true('unique index on phrase exists', $uniq > 0);
+icheck('no duplicate phrases (case-insensitive)', 0,
+    (int)$db->query("SELECT COUNT(*) c FROM (SELECT phrase FROM language GROUP BY phrase HAVING COUNT(*) > 1) t")->fetch_assoc()['c']);
+
+// INSERT IGNORE (what get_phrase() does on first use) must not create a duplicate, even with different case
+$db->query("DELETE FROM language WHERE phrase = '__test__phrase'");
+$db->query("INSERT IGNORE INTO language (phrase) VALUES ('__test__phrase')");
+$db->query("INSERT IGNORE INTO language (phrase) VALUES ('__TEST__PHRASE')");
+icheck('INSERT IGNORE twice (case differs) -> 1 row', 1,
+    (int)$db->query("SELECT COUNT(*) c FROM language WHERE phrase = '__test__phrase'")->fetch_assoc()['c']);
+icheck_true('new phrase gets blank translations by default',
+    $db->query("SELECT hindi FROM language WHERE phrase = '__test__phrase'")->fetch_assoc()['hindi'] === '');
+$db->query("DELETE FROM language WHERE phrase = '__test__phrase'");
+icheck('cleanup: test phrase removed', 0,
+    (int)$db->query("SELECT COUNT(*) c FROM language WHERE phrase = '__test__phrase'")->fetch_assoc()['c']);
+
+// Every phrase used in the code is in the table and translated in every language
+$used = array();
+$scan = function ($dir) use (&$scan, &$used) {
+    foreach (glob($dir . '/*') as $p) {
+        if (is_dir($p)) { $scan($p); continue; }
+        if (substr($p, -4) !== '.php') continue;
+        preg_match_all("/get_phrase\(\s*['\"]([^'\"]*)['\"]\s*\)/", file_get_contents($p), $m);
+        foreach ($m[1] as $k) $used[mb_strtolower($k)] = $k;
+    }
+};
+$scan(__DIR__ . '/../application');
+$rows = array();
+foreach ($db->query("SELECT * FROM language") as $r) $rows[mb_strtolower($r['phrase'])] = $r;
+$absent = array_diff_key($used, $rows);
+icheck('every get_phrase() key used in code is in the table', '', implode(', ', array_slice($absent, 0, 10)));
+foreach ($expected_langs as $l) {
+    $blank = array();
+    foreach ($used as $k => $orig) if (isset($rows[$k]) && trim($rows[$k][$l]) === '') $blank[] = $orig;
+    icheck("all used phrases translated: $l", '', implode(', ', array_slice($blank, 0, 10)));
+}
+
+// No double-encoded (mojibake) text left in any language
+$bad = array();
+foreach ($rows as $r) foreach ($expected_langs as $l)
+    if (sms_fix_mojibake($r[$l]) !== $r[$l]) $bad[] = "$l:{$r['phrase']}";
+icheck('no double-encoded text in any language', '', implode(', ', array_slice($bad, 0, 10)));
+
+// Translations are in the right script (spot-check the first letter range)
+$scripts = array('hindi' => '/\p{Devanagari}/u', 'marathi' => '/\p{Devanagari}/u', 'kannada' => '/\p{Kannada}/u',
+                 'bengali' => '/\p{Bengali}/u', 'gujarati' => '/\p{Gujarati}/u', 'tamil' => '/\p{Tamil}/u');
+foreach ($scripts as $l => $re) {
+    $in = 0; foreach ($rows as $r) if (preg_match($re, $r[$l])) $in++;
+    icheck_true("$l text is in its own script (>= 95% of rows)", count($rows) && $in / count($rows) >= 0.95);
+}
+
+$setting = $db->query("SELECT description FROM settings WHERE type = 'language'")->fetch_assoc();
+icheck_true('system language setting is a real language', $setting && sms_is_language($setting['description'], $lang_fields));
+
+/* ---- Exams & CBT schema (Exam_model::ensure_schema) ---- */
+imodule('G. Exams & CBT schema');
+$cols = function ($t) use ($db) { $o = array(); foreach ($db->query("SHOW COLUMNS FROM `$t`") as $c) $o[$c['Field']] = $c; return $o; };
+icheck_true('cbt_exam table exists', $db->query("SHOW TABLES LIKE 'cbt_exam'")->num_rows === 1);
+icheck_true('email_log table exists', $db->query("SHOW TABLES LIKE 'email_log'")->num_rows === 1);
+$q = $cols('question'); $a = $cols('exam_assignment'); $r = $cols('exam_result'); $e = $cols('exam'); $m = $cols('mark');
+icheck_true('question / assignment / result linked by exam_id', isset($q['exam_id'], $a['exam_id'], $r['exam_id']));
+icheck_true('assignment tracks start, submit, score', isset($a['started_at'], $a['submitted_at'], $a['score'], $a['total'], $a['notified_at'], $a['result_notified_at']));
+icheck_true('written exam has date, classes, totals, publish flags', isset($e['exam_date'], $e['class_ids'], $e['total_marks'], $e['pass_percent'], $e['results_published'], $e['reminder_sent_at']));
+icheck('mark_obtained allows blank (not entered)', 'YES', $m['mark_obtained']['Null']);
+icheck_true('mark_obtained allows half marks', stripos($m['mark_obtained']['Type'], 'decimal') === 0);
+icheck('every question belongs to an exam', 0, (int)$db->query("SELECT COUNT(*) c FROM question WHERE exam_id IS NULL")->fetch_assoc()['c']);
+$coll = array();
+foreach ($db->query("SELECT TABLE_NAME, TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME IN ('question','answer','exam_result','exam_assignment','cbt_exam','student','class','subject')") as $t)
+    $coll[$t['TABLE_COLLATION']] = true;
+icheck('exam tables share one collation (no "Illegal mix of collations")', 1, count($coll));
+foreach (array('smtp_host', 'smtp_port', 'email_copy_parent', 'cron_key') as $s)
+    icheck_true("setting $s exists", $db->query("SELECT 1 FROM settings WHERE type = '$s'")->num_rows === 1);
+
 $db->close();
 
 /* ---- Report ---- */

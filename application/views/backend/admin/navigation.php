@@ -472,34 +472,20 @@
                 <span>Manage Exams &amp; CBT</span>
             </a>
             <ul>
+                <li class="text-muted" style="padding:6px 20px 2px;font-size:11px;opacity:.7;">WRITTEN EXAMS</li>
                 <li class="<?php if ($page_name == 'exam') echo 'active'; ?> ">
                     <a href="<?php echo base_url(); ?>index.php?admin/exam">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('exam_list'); ?></span>
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('written_exams'); ?></span>
                     </a>
                 </li>
-                <li class="<?php if ($page_name == 'exam_add') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam_add">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('add_exams'); ?></span>
+                <li class="<?php if ($page_name == 'marks') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/marks">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('enter_marks'); ?></span>
                     </a>
                 </li>
-                <li class="<?php if ($page_name == 'exam_list' || $page_name == 'exam_view') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam_list">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('list_exams'); ?></span>
-                    </a>
-                </li>
-                <li class="<?php if ($page_name == 'exam_assign') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam_assign">
-                        <span><i class="entypo-dot"></i> Assign Exam to Student</span>
-                    </a>
-                </li>
-                <li class="<?php if ($page_name == 'exam_paper_check') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam_paper_check">
-                        <span><i class="entypo-dot"></i> Online Paper Checking</span>
-                    </a>
-                </li>
-                <li class="<?php if ($page_name == 'exam_result_list' || $page_name == 'exam_result_detail') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/exam_result_list">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('view_result'); ?></span>
+                <li class="<?php if ($page_name == 'tabulation_sheet') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/tabulation_sheet">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('tabulation_sheet'); ?></span>
                     </a>
                 </li>
                 <li class="<?php if ($page_name == 'grade') echo 'active'; ?> ">
@@ -507,14 +493,30 @@
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('exam_grades'); ?></span>
                     </a>
                 </li>
-                <li class="<?php if ($page_name == 'marks') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/marks">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('manage_marks'); ?></span>
+                <li class="text-muted" style="padding:6px 20px 2px;font-size:11px;opacity:.7;">ONLINE (CBT)</li>
+                <li class="<?php if ($page_name == 'exam_list' || $page_name == 'exam_view') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_list">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('cbt_exams'); ?></span>
                     </a>
                 </li>
-                <li class="<?php if ($page_name == 'tabulation_sheet') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/tabulation_sheet">
-                        <span><i class="entypo-dot"></i> <?php echo get_phrase('tabulation_sheet'); ?></span>
+                <li class="<?php if ($page_name == 'exam_add') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_add">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('add_cbt_exam'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'exam_assign') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_assign">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('assign_exam_to_students'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'exam_paper_check') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_paper_check">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('paper_checking'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'exam_result_list' || $page_name == 'exam_result_detail') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/exam_result_list">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('cbt_results'); ?></span>
                     </a>
                 </li>
             </ul>
@@ -648,9 +650,12 @@
         <li class="<?php
         if ($page_name == 'system_settings' ||
                 $page_name == 'manage_language' ||
-				 $page_name == 'banar' ||
+				 $page_name == 'banner' ||
 				  $page_name == 'front_end' ||
 				   $page_name == 'news' ||
+                    $page_name == 'email_settings' ||
+                    $page_name == 'theme_settings' ||
+                    $page_name == 'menu_permissions' ||
                     $page_name == 'sms_settings')
                         echo 'opened active';
         ?> ">
@@ -664,6 +669,21 @@
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('general_settings'); ?></span>
                     </a>
                 </li>
+                <li class="<?php if ($page_name == 'menu_permissions') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/menu_permissions">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('menu_permissions'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'theme_settings') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/theme_settings">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('theme_and_colours'); ?></span>
+                    </a>
+                </li>
+                <li class="<?php if ($page_name == 'email_settings') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/email_settings">
+                        <span><i class="entypo-dot"></i> <?php echo get_phrase('email_settings'); ?></span>
+                    </a>
+                </li>
                 <li class="<?php if ($page_name == 'sms_settings') echo 'active'; ?> ">
                     <a href="<?php echo base_url(); ?>index.php?admin/sms_settings">
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('sms_settings'); ?></span>
@@ -675,17 +695,19 @@
                     </a>
                 </li>
 				
-				<li class="<?php if ($page_name == 'banar') echo 'active'; ?> ">
-                    <a href="<?php echo base_url(); ?>index.php?admin/banar">
+				<?php /* Banners & Front Ends menu hidden: no public website shows this content
+				<li class="<?php if ($page_name == 'banner') echo 'active'; ?> ">
+                    <a href="<?php echo base_url(); ?>index.php?admin/banner">
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('manage_banners'); ?></span>
                     </a>
                 </li>
-				
+
 				<li class="<?php if ($page_name == 'front_end') echo 'active'; ?> ">
                     <a href="<?php echo base_url(); ?>index.php?admin/front_end">
                         <span><i class="entypo-dot"></i> <?php echo get_phrase('front_ends'); ?></span>
                     </a>
                 </li>
+				*/ ?>
 				
 				<?php /* News menu hidden
 				<li class="<?php if ($page_name == 'news') echo 'active'; ?> ">

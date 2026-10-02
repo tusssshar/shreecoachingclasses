@@ -34,6 +34,7 @@
     <link rel="stylesheet" href="assets/css/font-icons/font-awesome/css/font-awesome.min.css">
     <link rel="stylesheet" href="assets/js/vertical-timeline/css/component.css">
     <link rel="stylesheet" href="assets/js/datatables/responsive/css/datatables.responsive.css">
+    <?php include __DIR__ . '/theme_vars.php'; ?>
 
     <!-- ===================== -->
     <!-- JS CORE (IMPORTANT ORDER) -->

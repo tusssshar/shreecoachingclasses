@@ -39,12 +39,12 @@
     <tbody>
         <?php foreach ($enquiries as $row): ?>
             <tr>
-                <td><?php echo htmlspecialchars($row['enquiry_no']); ?></td>
-                <td><?php echo htmlspecialchars($row['session_name']); ?></td>
-                <td><?php echo htmlspecialchars($row['name']); ?></td>
-                <td><?php echo htmlspecialchars($row['mobile']); ?></td>
-                <td><?php echo htmlspecialchars($row['course']); ?></td>
-                <td><?php echo htmlspecialchars($row['source']); ?></td>
+                <td><?php echo htmlspecialchars((string)$row['enquiry_no']); ?></td>
+                <td><?php echo htmlspecialchars((string)$row['session_name']); ?></td>
+                <td><?php echo htmlspecialchars((string)$row['name']); ?></td>
+                <td><?php echo htmlspecialchars((string)$row['mobile']); ?></td>
+                <td><?php echo htmlspecialchars((string)$row['course']); ?></td>
+                <td><?php echo htmlspecialchars((string)$row['source']); ?></td>
                 <td><?php echo isset($staff_lookup[$row['assign_to']]) ? htmlspecialchars($staff_lookup[$row['assign_to']]) : '-'; ?></td>
                 <td><?php echo isset($staff_lookup[$row['handled_by']]) ? htmlspecialchars($staff_lookup[$row['handled_by']]) : '-'; ?></td>
                 <td><?php echo sms_enquiry_status_label($row['status']); ?></td>

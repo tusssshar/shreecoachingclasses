@@ -4,4 +4,6 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 class MY_Loader extends CI_Loader
 {
     public $export_service;
+    public $exam_model;
+    public $portal_model;
 }

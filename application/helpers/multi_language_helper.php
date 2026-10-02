@@ -16,36 +16,40 @@
 
 if ( ! function_exists('get_phrase'))
 {
+	/**
+	 * Translate a phrase key into the system language.
+	 *
+	 * The whole column for the current language is loaded once per request
+	 * (instead of 3 queries per call). Unknown keys are inserted so they show
+	 * up in Manage Language; untranslated ones fall back to "Title Case" text.
+	 */
 	function get_phrase($phrase = '') {
+		static $phrases = null, $language = null;
 		$CI	=&	get_instance();
 		$CI->load->database();
-		$lang_setting		=	$CI->db->get_where('settings' , array('type' => 'language'))->row();
-		$current_language	=	$lang_setting ? $lang_setting->description : '';
 
-		if ( $current_language	==	'') {
-			$current_language	=	'english';
-			$CI->session->set_userdata('current_language' , $current_language);
+		if ($phrases === null) {
+			$lang_setting	=	$CI->db->get_where('settings' , array('type' => 'language'))->row();
+			$language		=	$lang_setting ? $lang_setting->description : '';
+			if ( ! sms_is_language($language, $CI->db->list_fields('language')))
+				$language	=	'english';
+
+			$phrases = array();
+			foreach ($CI->db->select('phrase, ' . $CI->db->protect_identifiers($language) . ' AS t', FALSE)
+							->get('language')->result_array() as $row) {
+				// MySQL compares phrase keys case-insensitively, so key the cache the same way.
+				$phrases[mb_strtolower($row['phrase'])] = $row['t'];
+			}
 		}
 
+		$key = mb_strtolower((string)$phrase);
+		if ( ! array_key_exists($key, $phrases)) {
+			// INSERT IGNORE: the unique phrase index makes concurrent first-use safe.
+			$CI->db->query('INSERT IGNORE INTO `language` (`phrase`) VALUES (' . $CI->db->escape((string)$phrase) . ')');
+			$phrases[$key] = '';
+		}
 
-		/** insert blank phrases initially and populating the language db ***/
-		// Note: on PHP 8, ->row() returns null when the phrase isn't stored yet,
-		// so we must null-check before reading ->phrase (else "Attempt to read
-		// property 'phrase' on null" breaks every page using a new phrase).
-		$existing	=	$CI->db->get_where('language' , array('phrase' => $phrase))->row();
-		if ( $existing === null )
-			$CI->db->insert('language' , array('phrase' => $phrase));
-
-
-		// query for finding the phrase from `language` table
-		$query	=	$CI->db->get_where('language' , array('phrase' => $phrase));
-		$row   	=	$query->row();
-		
-		// return the current sessioned language field of according phrase, else return uppercase spaced word
-		if (isset($row->$current_language) && $row->$current_language !="")
-			return $row->$current_language;
-		else 
-			return ucwords(str_replace('_',' ',$phrase));
+		return ($phrases[$key] !== '' && $phrases[$key] !== null) ? $phrases[$key] : sms_humanize_phrase($phrase);
 	}
 }
 

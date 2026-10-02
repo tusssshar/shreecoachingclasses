@@ -22,7 +22,7 @@
                             <div class="form-group">
                                 <label class="col-sm-3 control-label"><?php echo get_phrase('vision');?></label>
                                 <div class="col-sm-5">
-                <textarea  class="form-control" value = "" name="vission"/><?php echo $this->db->get_where('front_end' , array('type' =>'vission'))->row()->description;?></textarea>
+                <textarea  class="form-control" value = "" name="vision"/><?php echo $this->db->get_where('front_end' , array('type' =>'vision'))->row()->description;?></textarea>
                                 </div>
                             </div>
                             <div class="form-group">

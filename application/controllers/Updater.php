@@ -36,7 +36,8 @@ class Updater extends CI_Controller
     }
 
     /***** UPDATE PRODUCT *****/
-
+    // Disabled: vendor updater not used (would overwrite custom code / run uploaded PHP).
+    /*
     function update($task = '', $purchase_code = '')
     {
 
@@ -87,5 +88,6 @@ class Updater extends CI_Controller
         $this->session->set_flashdata('flash_message', get_phrase('product_updated_successfully'));
         redirect(base_url() . 'index.php?admin/system_settings');
     }
+    */
 
 }

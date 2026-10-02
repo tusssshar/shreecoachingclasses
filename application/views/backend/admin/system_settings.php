@@ -76,15 +76,12 @@
                       <div class="col-sm-9">
                           <select name="language" class="form-control ">
                                 <?php
-									$fields = $this->db->list_fields('language');
-									foreach ($fields as $field)
+									$current_default_language	=	$this->db->get_where('settings' , array('type'=>'language'))->row()->description;
+									foreach (sms_language_columns($this->db->list_fields('language')) as $field)
 									{
-										if ($field == 'phrase_id' || $field == 'phrase')continue;
-										
-										$current_default_language	=	$this->db->get_where('settings' , array('type'=>'language'))->row()->description;
 										?>
                                 		<option value="<?php echo $field;?>"
-                                        	<?php if ($current_default_language == $field)echo 'selected';?>> <?php echo $field;?> </option>
+                                        	<?php if ($current_default_language == $field)echo 'selected';?>> <?php echo html_escape(sms_language_label($field));?> </option>
                                         <?php
 									}
 									?>
@@ -142,8 +139,9 @@
             
             </div>
 			
+			<?php /* UPDATE PRODUCT disabled: vendor updater not used (would overwrite custom code / run uploaded PHP).
 			<div class="panel panel-gradient" data-collapsed="0">
-            
+
             <div class="panel-heading">
                 <div class="panel-title">
                     <?php echo get_phrase('update_product');?>
@@ -174,7 +172,8 @@
             </div>
 
         </div>
-        
+			*/ ?>
+
         </div>
 
       <?php 

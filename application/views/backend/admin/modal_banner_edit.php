@@ -1,5 +1,5 @@
 <?php 
-$edit_data		=	$this->db->get_where('banar' , array('banar_id' => $param2) )->result_array();
+$edit_data		=	$this->db->get_where('banner' , array('banner_id' => $param2) )->result_array();
 foreach ( $edit_data as $row):
 ?>
 <div class="row">
@@ -8,11 +8,11 @@ foreach ( $edit_data as $row):
         	<div class="panel-heading">
             	<div class="panel-title" >
             		<i class="entypo-plus-circled"></i>
-					<?php echo get_phrase('edit_bannar');?>
+					<?php echo get_phrase('edit_banner');?>
             	</div>
             </div>
 			<div class="panel-body">
-                    <?php echo form_open(base_url() . 'index.php?admin/banar/do_update/'.$row['banar_id'] , array('class' => 'form-horizontal form-groups-bordered validate','target'=>'_top', 'enctype' => 'multipart/form-data'));?>
+                    <?php echo form_open(base_url() . 'index.php?admin/banner/do_update/'.$row['banner_id'] , array('class' => 'form-horizontal form-groups-bordered validate','target'=>'_top', 'enctype' => 'multipart/form-data'));?>
                         		
                                 <div class="form-group">
                                 <label for="field-1" class="col-sm-3 control-label"><?php echo get_phrase('photo');?></label>
@@ -20,7 +20,7 @@ foreach ( $edit_data as $row):
                                 <div class="col-sm-5">
                                     <div class="fileinput fileinput-new" data-provides="fileinput">
                                         <div class="fileinput-new thumbnail" style="width: 100px; height: 100px;" data-trigger="fileinput">
-                                            <img src="<?php echo $this->crud_model->get_image_url('banar' , $row['banar_id']);?>" alt="...">
+                                            <img src="<?php echo $this->crud_model->get_image_url('banner' , $row['banner_id']);?>" alt="...">
                                         </div>
                                         <div class="fileinput-preview fileinput-exists thumbnail" style="max-width: 200px; max-height: 150px"></div>
                                         <div>
@@ -55,7 +55,7 @@ foreach ( $edit_data as $row):
                             
                         <div class="form-group">
                             <div class="col-sm-offset-3 col-sm-5">
-                                <button type="submit" class="btn btn-info"><i class="fa fa-save"></i>&nbsp;<?php echo get_phrase('edit_banar');?></button>
+                                <button type="submit" class="btn btn-info"><i class="fa fa-save"></i>&nbsp;<?php echo get_phrase('edit_banner');?></button>
                             </div>
                         </div>
                 <?php echo form_close();?>

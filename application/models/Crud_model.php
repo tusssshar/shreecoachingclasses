@@ -358,8 +358,9 @@ class Crud_model extends CI_Model {
             return base_url() . 'uploads/user.jpg';
         }
 
-        if (file_exists('uploads/' . $type . '_image/' . $id . '.jpg'))
-            $image_url = base_url() . 'uploads/' . $type . '_image/' . $id . '.jpg';
+        $image_path = 'uploads/' . $type . '_image/' . $id . '.jpg';
+        if (file_exists($image_path))
+            $image_url = sms_cache_busted_url(base_url() . $image_path, filemtime($image_path));
         else
             $image_url = base_url() . 'uploads/user.jpg';
 

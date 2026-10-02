@@ -1,0 +1,4 @@
+# Private notes kept in the project folder: never serve them over the web.
+<Files "SMS_Logins.txt">
+    Require all denied
+</Files>
